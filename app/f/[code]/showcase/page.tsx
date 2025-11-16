@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Album, MediaItem } from '@/types';
+import BottomNav from '@/components/BottomNav';
 
 export default function ShowcasePage() {
   const params = useParams<{ code: string }>();
@@ -88,6 +89,7 @@ export default function ShowcasePage() {
             <div className="text-gray-600">Select an album to view media.</div>
           )}
         </div>
+        <BottomNav code={code} />
       </div>
     </PasswordGate>
   );

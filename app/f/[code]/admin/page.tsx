@@ -597,35 +597,6 @@ function AdminPageContent() {
             <StatsCards stats={stats} />
 
             <div className="space-y-8">
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">Showcase</h3>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm text-gray-600">Create albums and upload photos, videos, audio, and PDFs. Users can view under Showcase.</p>
-                  <button
-                    onClick={() => { setEditingAlbum(null); setIsAlbumModalOpen(true); }}
-                    className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                  >
-                    Add Album
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {albums.map(a => (
-                    <div key={a.id} className="border rounded-lg p-3 bg-white">
-                      <div className="font-semibold text-gray-800 truncate">{a.title}</div>
-                      <div className="text-xs text-gray-500">{a.year || 'Year N/A'}</div>
-                      <div className="text-sm text-gray-600 mt-1 line-clamp-2">{a.description}</div>
-                      <div className="flex gap-2 mt-3">
-                        <button onClick={() => { setEditingAlbum(a); setIsAlbumModalOpen(true); }} className="px-3 py-1 border rounded text-sm">Edit</button>
-                        <button onClick={async () => { await supabase.from('albums').delete().eq('id', a.id); toast.success('Album deleted'); fetchData(); }} className="px-3 py-1 border rounded text-sm">Delete</button>
-                        <button onClick={() => { setActiveAlbumId(a.id); setIsManageMediaOpen(true); }} className="px-3 py-1 border rounded text-sm">Manage Media</button>
-                      </div>
-                    </div>
-                  ))}
-                  {albums.length === 0 && (
-                    <div className="text-sm text-gray-600">No albums yet.</div>
-                  )}
-                </div>
-              </div>
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-2xl font-bold text-gray-800">Collections</h2>
@@ -1107,6 +1078,36 @@ function AdminPageContent() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              <div className="bg-white rounded-lg shadow-md p-6 mt-8">
+                <h3 className="text-lg font-bold text-gray-800 mb-4">Showcase</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm text-gray-600">Create albums and upload photos, videos, audio, and PDFs. Users can view under Showcase.</p>
+                  <button
+                    onClick={() => { setEditingAlbum(null); setIsAlbumModalOpen(true); }}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                  >
+                    Add Album
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {albums.map(a => (
+                    <div key={a.id} className="border rounded-lg p-3 bg-white">
+                      <div className="font-semibold text-gray-800 truncate">{a.title}</div>
+                      <div className="text-xs text-gray-500">{a.year || 'Year N/A'}</div>
+                      <div className="text-sm text-gray-600 mt-1 line-clamp-2">{a.description}</div>
+                      <div className="flex gap-2 mt-3">
+                        <button onClick={() => { setEditingAlbum(a); setIsAlbumModalOpen(true); }} className="px-3 py-1 border rounded text-sm">Edit</button>
+                        <button onClick={async () => { await supabase.from('albums').delete().eq('id', a.id); toast.success('Album deleted'); fetchData(); }} className="px-3 py-1 border rounded text-sm">Delete</button>
+                        <button onClick={() => { setActiveAlbumId(a.id); setIsManageMediaOpen(true); }} className="px-3 py-1 border rounded text-sm">Manage Media</button>
+                      </div>
+                    </div>
+                  ))}
+                  {albums.length === 0 && (
+                    <div className="text-sm text-gray-600">No albums yet.</div>
+                  )}
+                </div>
               </div>
 
               <div className="mt-10">
