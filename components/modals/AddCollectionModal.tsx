@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
@@ -23,6 +23,8 @@ interface AddCollectionModalProps {
   modes: string[];
   editData?: Collection | null;
   festivalId: string;
+  festivalStartDate?: string;
+  festivalEndDate?: string;
 }
 
 export default function AddCollectionModal({
@@ -33,6 +35,8 @@ export default function AddCollectionModal({
   modes,
   editData,
   festivalId,
+  festivalStartDate,
+  festivalEndDate,
 }: AddCollectionModalProps) {
   const today = new Date().toISOString().split('T')[0];
   
@@ -45,19 +49,27 @@ export default function AddCollectionModal({
     date: today,
   };
 
-  const [forms, setForms] = useState<CollectionForm[]>([
-    editData
-      ? {
+  const [forms, setForms] = useState<CollectionForm[]>([emptyForm]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Reset forms when modal opens or editData changes
+  useEffect(() => {
+    if (isOpen) {
+      if (editData) {
+        setForms([{
           name: editData.name,
           amount: editData.amount.toString(),
           group_name: editData.group_name,
           mode: editData.mode,
           note: editData.note || '',
           date: editData.date,
-        }
-      : emptyForm,
-  ]);
-  const [isLoading, setIsLoading] = useState(false);
+        }]);
+      } else {
+        setForms([emptyForm]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, editData]);
 
   const addForm = () => {
     if (forms.length < 5) {
@@ -88,6 +100,17 @@ export default function AddCollectionModal({
       }
       if (isNaN(Number(form.amount)) || Number(form.amount) <= 0) {
         toast.error(`Form ${i + 1}: Please enter a valid amount`);
+        return;
+      }
+
+      // Validate date is within festival range
+      const formDate = new Date(form.date);
+      if (festivalStartDate && formDate < new Date(festivalStartDate)) {
+        toast.error(`Form ${i + 1}: Date cannot be before festival start date`);
+        return;
+      }
+      if (festivalEndDate && formDate > new Date(festivalEndDate)) {
+        toast.error(`Form ${i + 1}: Date cannot be after festival end date`);
         return;
       }
     }
@@ -259,6 +282,8 @@ export default function AddCollectionModal({
                     type="date"
                     value={form.date}
                     onChange={(e) => updateForm(index, 'date', e.target.value)}
+                    min={festivalStartDate || ''}
+                    max={festivalEndDate || ''}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />

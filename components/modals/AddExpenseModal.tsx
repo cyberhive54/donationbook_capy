@@ -26,6 +26,8 @@ interface AddExpenseModalProps {
   modes: string[];
   editData?: Expense | null;
   festivalId: string;
+  festivalStartDate?: string;
+  festivalEndDate?: string;
 }
 
 export default function AddExpenseModal({
@@ -36,6 +38,8 @@ export default function AddExpenseModal({
   modes,
   editData,
   festivalId,
+  festivalStartDate,
+  festivalEndDate,
 }: AddExpenseModalProps) {
   const today = new Date().toISOString().split('T')[0];
   
@@ -51,9 +55,14 @@ export default function AddExpenseModal({
     manualTotal: false,
   };
 
-  const [forms, setForms] = useState<ExpenseForm[]>([
-    editData
-      ? {
+  const [forms, setForms] = useState<ExpenseForm[]>([emptyForm]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Reset forms when modal opens or editData changes
+  useEffect(() => {
+    if (isOpen) {
+      if (editData) {
+        setForms([{
           item: editData.item,
           pieces: editData.pieces.toString(),
           price_per_piece: editData.price_per_piece.toString(),
@@ -63,10 +72,13 @@ export default function AddExpenseModal({
           note: editData.note || '',
           date: editData.date,
           manualTotal: false,
-        }
-      : emptyForm,
-  ]);
-  const [isLoading, setIsLoading] = useState(false);
+        }]);
+      } else {
+        setForms([emptyForm]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, editData]);
 
   const addForm = () => {
     if (forms.length < 10) {
@@ -125,6 +137,17 @@ export default function AddExpenseModal({
         Number(form.total_amount) <= 0
       ) {
         toast.error(`Form ${i + 1}: Please enter valid numbers`);
+        return;
+      }
+
+      // Validate date is within festival range
+      const formDate = new Date(form.date);
+      if (festivalStartDate && formDate < new Date(festivalStartDate)) {
+        toast.error(`Form ${i + 1}: Date cannot be before festival start date`);
+        return;
+      }
+      if (festivalEndDate && formDate > new Date(festivalEndDate)) {
+        toast.error(`Form ${i + 1}: Date cannot be after festival end date`);
         return;
       }
     }
@@ -330,6 +353,8 @@ export default function AddExpenseModal({
                     type="date"
                     value={form.date}
                     onChange={(e) => updateForm(index, 'date', e.target.value)}
+                    min={festivalStartDate || ''}
+                    max={festivalEndDate || ''}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />
