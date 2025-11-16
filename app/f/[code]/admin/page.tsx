@@ -785,12 +785,58 @@ function AdminPageContent() {
                       Enable dark theme
                     </label>
 
-                    <button
-                      onClick={handleUpdateTheme}
-                      className="w-full mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                    >
-                      Save Theme
-                    </button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                      <button
+                        onClick={handleUpdateTheme}
+                        className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                      >
+                        Save Theme
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!festival) return;
+                          const defaults = {
+                            theme_primary_color: '#2563eb',
+                            theme_secondary_color: '#1f2937',
+                            theme_bg_color: '#f8fafc',
+                            theme_bg_image_url: null as string | null,
+                            theme_text_color: '#111827',
+                            theme_border_color: '#d1d5db',
+                            theme_table_bg: '#ffffff',
+                            theme_card_bg: '#ffffff',
+                            theme_dark: false,
+                          };
+                          setThemeForm({
+                            theme_primary_color: defaults.theme_primary_color,
+                            theme_secondary_color: defaults.theme_secondary_color,
+                            theme_bg_color: defaults.theme_bg_color,
+                            theme_bg_image_url: '',
+                            theme_text_color: defaults.theme_text_color,
+                            theme_border_color: defaults.theme_border_color,
+                            theme_table_bg: defaults.theme_table_bg,
+                            theme_card_bg: defaults.theme_card_bg,
+                            theme_dark: defaults.theme_dark,
+                          });
+                          try {
+                            const { error } = await supabase
+                              .from('festivals')
+                              .update({
+                                ...defaults,
+                                updated_at: new Date().toISOString(),
+                              })
+                              .eq('id', festival.id);
+                            if (error) throw error;
+                            toast.success('Theme restored to defaults');
+                            fetchData();
+                          } catch (e) {
+                            toast.error('Failed to restore defaults');
+                          }
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                      >
+                        Restore Defaults
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
