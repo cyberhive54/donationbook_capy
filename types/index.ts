@@ -89,6 +89,32 @@ export interface Stats {
   balance: number;
 }
 
+export interface Album {
+  id: string;
+  festival_id: string;
+  title: string;
+  description?: string;
+  year?: number;
+  cover_url?: string;
+  created_at?: string;
+}
+
+export type MediaType = 'image' | 'video' | 'audio' | 'pdf' | 'other';
+
+export interface MediaItem {
+  id: string;
+  album_id: string;
+  type: MediaType;
+  title?: string;
+  description?: string;
+  url: string;
+  mime_type?: string;
+  size_bytes?: number;
+  duration_sec?: number;
+  created_at?: string;
+  thumbnail_url?: string;
+}
+
 export interface Group {
   id: string;
   name: string;
