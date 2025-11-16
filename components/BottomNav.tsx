@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Wallet, ArrowLeftRight, ShoppingCart } from 'lucide-react';
+import { Home, Wallet, ArrowLeftRight, ShoppingCart, Sparkles } from 'lucide-react';
 
 interface BottomNavProps {
   code?: string;
@@ -18,6 +18,7 @@ export default function BottomNav({ code }: BottomNavProps) {
     { href: `/f/${code}/collection`, label: 'Collection', icon: Wallet },
     { href: `/f/${code}/transaction`, label: 'Transaction', icon: ArrowLeftRight },
     { href: `/f/${code}/expense`, label: 'Expense', icon: ShoppingCart },
+    { href: `/f/${code}/showcase`, label: 'Showcase', icon: Sparkles },
   ];
 
   return (

@@ -353,6 +353,8 @@ function AdminPageContent() {
 
   const themeStyles = getThemeStyles(festival);
 
+  const normalize = (s: string) => s?.trim().toLowerCase();
+
   const downloadJSON = (data: any, filename: string) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -366,8 +368,32 @@ function AdminPageContent() {
   const handleExportCollections = () => {
     downloadJSON(collections, `${festival?.code || 'fest'}-collections.json`);
   };
+  const handleExportCollectionsImportFmt = () => {
+    const data = collections.map(c => ({
+      name: c.name,
+      amount: Number(c.amount),
+      group_name: c.group_name,
+      mode: c.mode,
+      note: c.note || '',
+      date: c.date,
+    }));
+    downloadJSON(data, `${festival?.code || 'fest'}-collections-import.json`);
+  };
   const handleExportExpenses = () => {
     downloadJSON(expenses, `${festival?.code || 'fest'}-expenses.json`);
+  };
+  const handleExportExpensesImportFmt = () => {
+    const data = expenses.map(e => ({
+      item: e.item,
+      pieces: Number(e.pieces),
+      price_per_piece: Number(e.price_per_piece),
+      total_amount: Number(e.total_amount),
+      category: e.category,
+      mode: e.mode,
+      note: e.note || '',
+      date: e.date,
+    }));
+    downloadJSON(data, `${festival?.code || 'fest'}-expenses-import.json`);
   };
 
   const exampleCollections = [
@@ -384,17 +410,37 @@ function AdminPageContent() {
     try {
       const parsed = JSON.parse(importText);
       if (!Array.isArray(parsed)) throw new Error('JSON should be an array');
-      const rows = parsed.map((c: any) => ({
-        festival_id: festival.id,
-        name: String(c.name || '').trim(),
-        amount: Number(c.amount),
-        group_name: String(c.group_name || ''),
-        mode: String(c.mode || ''),
-        note: c.note ? String(c.note).trim() : null,
-        date: String(c.date),
-      }));
-      const invalid = rows.find(r => !r.name || !r.amount || !r.group_name || !r.mode || !r.date);
-      if (invalid) throw new Error('Missing required fields in some rows');
+      const groupMap = new Map(groups.map(g => [normalize(g), g]));
+      const modeMap = new Map(collectionModes.map(m => [normalize(m), m]));
+
+      const rows = parsed.map((c: any, idx: number) => {
+        const name = String(c.name || '').trim();
+        const amount = Number(c.amount);
+        const groupKey = normalize(String(c.group_name || ''));
+        const modeKey = normalize(String(c.mode || ''));
+        const date = String(c.date || '').trim();
+        const note = c.note != null ? String(c.note).trim() : null;
+
+        if (!name || !amount || !groupKey || !modeKey || !date) {
+          throw new Error(`Row ${idx + 1}: Missing required fields (name, amount, group_name, mode, date)`);
+        }
+        const group_name = groupMap.get(groupKey);
+        if (!group_name) throw new Error(`Row ${idx + 1}: Unknown group '${c.group_name}'. Ensure group exists or check spelling.`);
+        const mode = modeMap.get(modeKey);
+        if (!mode) throw new Error(`Row ${idx + 1}: Unknown mode '${c.mode}'. Ensure mode exists or check spelling.`);
+        if (isNaN(Date.parse(date))) throw new Error(`Row ${idx + 1}: Invalid date '${date}'. Use YYYY-MM-DD.`);
+
+        return {
+          festival_id: festival.id,
+          name,
+          amount,
+          group_name,
+          mode,
+          note,
+          date,
+        };
+      });
+
       const { error } = await supabase.from('collections').insert(rows);
       if (error) throw error;
       toast.success('Collections imported');
@@ -411,19 +457,41 @@ function AdminPageContent() {
     try {
       const parsed = JSON.parse(importText);
       if (!Array.isArray(parsed)) throw new Error('JSON should be an array');
-      const rows = parsed.map((x: any) => ({
-        festival_id: festival.id,
-        item: String(x.item || '').trim(),
-        pieces: Number(x.pieces),
-        price_per_piece: Number(x.price_per_piece),
-        total_amount: Number(x.total_amount),
-        category: String(x.category || ''),
-        mode: String(x.mode || ''),
-        note: x.note ? String(x.note).trim() : null,
-        date: String(x.date),
-      }));
-      const invalid = rows.find(r => !r.item || !r.pieces || r.pieces <= 0 || r.total_amount <= 0 || !r.category || !r.mode || !r.date);
-      if (invalid) throw new Error('Missing/invalid required fields in some rows');
+      const categoryMap = new Map(categories.map(c => [normalize(c), c]));
+      const modeMap = new Map(expenseModes.map(m => [normalize(m), m]));
+
+      const rows = parsed.map((x: any, idx: number) => {
+        const item = String(x.item || '').trim();
+        const pieces = Number(x.pieces);
+        const price_per_piece = Number(x.price_per_piece);
+        const total_amount = Number(x.total_amount);
+        const categoryKey = normalize(String(x.category || ''));
+        const modeKey = normalize(String(x.mode || ''));
+        const date = String(x.date || '').trim();
+        const note = x.note != null ? String(x.note).trim() : null;
+
+        if (!item || !pieces || pieces <= 0 || total_amount <= 0 || !categoryKey || !modeKey || !date) {
+          throw new Error(`Row ${idx + 1}: Missing/invalid required fields (item, pieces, total_amount, category, mode, date)`);
+        }
+        const category = categoryMap.get(categoryKey);
+        if (!category) throw new Error(`Row ${idx + 1}: Unknown category '${x.category}'. Ensure category exists or check spelling.`);
+        const mode = modeMap.get(modeKey);
+        if (!mode) throw new Error(`Row ${idx + 1}: Unknown mode '${x.mode}'. Ensure mode exists or check spelling.`);
+        if (isNaN(Date.parse(date))) throw new Error(`Row ${idx + 1}: Invalid date '${date}'. Use YYYY-MM-DD.`);
+
+        return {
+          festival_id: festival.id,
+          item,
+          pieces,
+          price_per_piece,
+          total_amount,
+          category,
+          mode,
+          note,
+          date,
+        };
+      });
+
       const { error } = await supabase.from('expenses').insert(rows);
       if (error) throw error;
       toast.success('Expenses imported');
@@ -447,6 +515,11 @@ function AdminPageContent() {
       if (deleteFestivalDownload) {
         downloadJSON(collections, `${festival.code}-collections.json`);
         downloadJSON(expenses, `${festival.code}-expenses.json`);
+        // also download import-format
+        const collImp = collections.map(c => ({ name: c.name, amount: Number(c.amount), group_name: c.group_name, mode: c.mode, note: c.note || '', date: c.date }));
+        const expImp = expenses.map(e => ({ item: e.item, pieces: Number(e.pieces), price_per_piece: Number(e.price_per_piece), total_amount: Number(e.total_amount), category: e.category, mode: e.mode, note: e.note || '', date: e.date }));
+        downloadJSON(collImp, `${festival.code}-collections-import.json`);
+        downloadJSON(expImp, `${festival.code}-expenses-import.json`);
       }
       // delete child tables then festival
       await supabase.from('collections').delete().eq('festival_id', festival.id);
@@ -536,6 +609,12 @@ function AdminPageContent() {
                       Export JSON
                     </button>
                     <button
+                      onClick={handleExportCollectionsImportFmt}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Export (Import Format)
+                    </button>
+                    <button
                       onClick={() => { setIsImportCollectionsOpen(true); setImportText(''); }}
                       className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
                     >
@@ -574,6 +653,12 @@ function AdminPageContent() {
                       Export JSON
                     </button>
                     <button
+                      onClick={handleExportExpensesImportFmt}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Export (Import Format)
+                    </button>
+                    <button
                       onClick={() => { setIsImportExpensesOpen(true); setImportText(''); }}
                       className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
                     >
@@ -589,15 +674,6 @@ function AdminPageContent() {
                   onDelete={handleDeleteExpense}
                   isAdmin
                 />
-              </div>
-
-              <div className="mt-8">
-                <button
-                  onClick={() => setIsDeleteFestivalOpen(true)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                >
-                  Permanently Delete Festival
-                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -994,6 +1070,15 @@ function AdminPageContent() {
                   </div>
                 )}
               </div>
+
+              <div className="mt-10">
+                <button
+                  onClick={() => setIsDeleteFestivalOpen(true)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  Permanently Delete Festival
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -1043,7 +1128,10 @@ function AdminPageContent() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-2">Import Collections (JSON)</h3>
-            <p className="text-sm text-gray-600 mb-2">Paste JSON array. Example format:</p>
+            <p className="text-sm text-gray-600 mb-2">Paste JSON array. Required: name, amount, group_name, mode, date. Note optional. Group & Mode will be matched case-insensitively and trimmed to existing values.</p>
+            <p className="text-xs text-gray-500 mb-2">If a group/mode does not exist, import will fail. Create them first in settings.</p>
+            <p className="text-xs text-gray-500 mb-2">Dates must be in YYYY-MM-DD.</p>
+            <p className="text-xs text-gray-500 mb-2">You can paste multiple rows.</p>
             <div className="bg-gray-50 p-3 rounded border text-xs mb-3">
 {`[
   { "name": "John Doe", "amount": 500, "group_name": "Group A", "mode": "Cash", "note": "Blessings", "date": "2025-10-21" },
@@ -1065,7 +1153,10 @@ function AdminPageContent() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-2">Import Expenses (JSON)</h3>
-            <p className="text-sm text-gray-600 mb-2">Paste JSON array. Example format:</p>
+            <p className="text-sm text-gray-600 mb-2">Paste JSON array. Required: item, pieces, price_per_piece, total_amount, category, mode, date. Note optional. Category & Mode will be matched case-insensitively and trimmed to existing values.</p>
+            <p className="text-xs text-gray-500 mb-2">If a category/mode does not exist, import will fail. Create them first in settings.</p>
+            <p className="text-xs text-gray-500 mb-2">Dates must be in YYYY-MM-DD.</p>
+            <p className="text-xs text-gray-500 mb-2">You can paste multiple rows.</p>
             <div className="bg-gray-50 p-3 rounded border text-xs mb-3">
 {`[
   { "item": "Flowers", "pieces": 5, "price_per_piece": 50, "total_amount": 250, "category": "Decoration", "mode": "Cash", "note": "", "date": "2025-10-21" },
