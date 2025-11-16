@@ -38,6 +38,12 @@ function AdminPageContent() {
   const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isImportCollectionsOpen, setIsImportCollectionsOpen] = useState(false);
+  const [isImportExpensesOpen, setIsImportExpensesOpen] = useState(false);
+  const [isDeleteFestivalOpen, setIsDeleteFestivalOpen] = useState(false);
+  const [deleteFestivalDownload, setDeleteFestivalDownload] = useState(true);
+  const [deleteFestivalAdminPass, setDeleteFestivalAdminPass] = useState('');
+  const [importText, setImportText] = useState('');
   const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'collection' | 'expense'; id: string } | null>(null);
@@ -347,6 +353,117 @@ function AdminPageContent() {
 
   const themeStyles = getThemeStyles(festival);
 
+  const downloadJSON = (data: any, filename: string) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportCollections = () => {
+    downloadJSON(collections, `${festival?.code || 'fest'}-collections.json`);
+  };
+  const handleExportExpenses = () => {
+    downloadJSON(expenses, `${festival?.code || 'fest'}-expenses.json`);
+  };
+
+  const exampleCollections = [
+    { name: 'John Doe', amount: 500, group_name: 'Group A', mode: 'Cash', note: 'Blessings', date: '2025-10-21' },
+    { name: 'Jane', amount: 1000, group_name: 'Group B', mode: 'UPI', note: '', date: '2025-10-22' },
+  ];
+  const exampleExpenses = [
+    { item: 'Flowers', pieces: 5, price_per_piece: 50, total_amount: 250, category: 'Decoration', mode: 'Cash', note: '', date: '2025-10-21' },
+    { item: 'Lights', pieces: 2, price_per_piece: 300, total_amount: 600, category: 'Decoration', mode: 'UPI', note: 'extra cable', date: '2025-10-22' },
+  ];
+
+  const handleImportCollections = async () => {
+    if (!festival) return;
+    try {
+      const parsed = JSON.parse(importText);
+      if (!Array.isArray(parsed)) throw new Error('JSON should be an array');
+      const rows = parsed.map((c: any) => ({
+        festival_id: festival.id,
+        name: String(c.name || '').trim(),
+        amount: Number(c.amount),
+        group_name: String(c.group_name || ''),
+        mode: String(c.mode || ''),
+        note: c.note ? String(c.note).trim() : null,
+        date: String(c.date),
+      }));
+      const invalid = rows.find(r => !r.name || !r.amount || !r.group_name || !r.mode || !r.date);
+      if (invalid) throw new Error('Missing required fields in some rows');
+      const { error } = await supabase.from('collections').insert(rows);
+      if (error) throw error;
+      toast.success('Collections imported');
+      setIsImportCollectionsOpen(false);
+      setImportText('');
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to import');
+    }
+  };
+
+  const handleImportExpenses = async () => {
+    if (!festival) return;
+    try {
+      const parsed = JSON.parse(importText);
+      if (!Array.isArray(parsed)) throw new Error('JSON should be an array');
+      const rows = parsed.map((x: any) => ({
+        festival_id: festival.id,
+        item: String(x.item || '').trim(),
+        pieces: Number(x.pieces),
+        price_per_piece: Number(x.price_per_piece),
+        total_amount: Number(x.total_amount),
+        category: String(x.category || ''),
+        mode: String(x.mode || ''),
+        note: x.note ? String(x.note).trim() : null,
+        date: String(x.date),
+      }));
+      const invalid = rows.find(r => !r.item || !r.pieces || r.pieces <= 0 || r.total_amount <= 0 || !r.category || !r.mode || !r.date);
+      if (invalid) throw new Error('Missing/invalid required fields in some rows');
+      const { error } = await supabase.from('expenses').insert(rows);
+      if (error) throw error;
+      toast.success('Expenses imported');
+      setIsImportExpensesOpen(false);
+      setImportText('');
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to import');
+    }
+  };
+
+  const handleDeleteFestival = async () => {
+    if (!festival) return;
+    try {
+      // verify admin password client-side minimal (optional if hook already protects)
+      if (!deleteFestivalAdminPass.trim()) {
+        toast.error('Enter admin password');
+        return;
+      }
+      // export first if chosen
+      if (deleteFestivalDownload) {
+        downloadJSON(collections, `${festival.code}-collections.json`);
+        downloadJSON(expenses, `${festival.code}-expenses.json`);
+      }
+      // delete child tables then festival
+      await supabase.from('collections').delete().eq('festival_id', festival.id);
+      await supabase.from('expenses').delete().eq('festival_id', festival.id);
+      await supabase.from('groups').delete().eq('festival_id', festival.id);
+      await supabase.from('categories').delete().eq('festival_id', festival.id);
+      await supabase.from('collection_modes').delete().eq('festival_id', festival.id);
+      await supabase.from('expense_modes').delete().eq('festival_id', festival.id);
+      const { error } = await supabase.from('festivals').delete().eq('id', festival.id);
+      if (error) throw error;
+      toast.success('Festival permanently deleted');
+      window.location.href = '/';
+    } catch (e) {
+      toast.error('Failed to delete festival');
+    }
+  };
+
   return (
     <div className="min-h-screen pb-24" style={{ ...bgStyle, ...themeStyles }}>
       <div className="max-w-7xl mx-auto px-4 py-6">
@@ -401,16 +518,30 @@ function AdminPageContent() {
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-2xl font-bold text-gray-800">Collections</h2>
-                  <button
-                    onClick={() => {
-                      setEditingCollection(null);
-                      setIsCollectionModalOpen(true);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingCollection(null);
+                        setIsCollectionModalOpen(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
                     <Plus className="w-5 h-5" />
-                    Add Collection
-                  </button>
+                      Add Collection
+                    </button>
+                    <button
+                      onClick={handleExportCollections}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Export JSON
+                    </button>
+                    <button
+                      onClick={() => { setIsImportCollectionsOpen(true); setImportText(''); }}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Import JSON
+                    </button>
+                  </div>
                 </div>
                 <CollectionTable
                   collections={collections}
@@ -425,16 +556,30 @@ function AdminPageContent() {
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-2xl font-bold text-gray-800">Expenses</h2>
-                  <button
-                    onClick={() => {
-                      setEditingExpense(null);
-                      setIsExpenseModalOpen(true);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingExpense(null);
+                        setIsExpenseModalOpen(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
                     <Plus className="w-5 h-5" />
-                    Add Expense
-                  </button>
+                      Add Expense
+                    </button>
+                    <button
+                      onClick={handleExportExpenses}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Export JSON
+                    </button>
+                    <button
+                      onClick={() => { setIsImportExpensesOpen(true); setImportText(''); }}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Import JSON
+                    </button>
+                  </div>
                 </div>
                 <ExpenseTable
                   expenses={expenses}
@@ -444,6 +589,15 @@ function AdminPageContent() {
                   onDelete={handleDeleteExpense}
                   isAdmin
                 />
+              </div>
+
+              <div className="mt-8">
+                <button
+                  onClick={() => setIsDeleteFestivalOpen(true)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  Permanently Delete Festival
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -883,6 +1037,69 @@ function AdminPageContent() {
         festivalStartDate={festival?.event_start_date}
         festivalEndDate={festival?.event_end_date}
       />
+
+      {/* Import Collections Modal */}
+      {isImportCollectionsOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Import Collections (JSON)</h3>
+            <p className="text-sm text-gray-600 mb-2">Paste JSON array. Example format:</p>
+            <div className="bg-gray-50 p-3 rounded border text-xs mb-3">
+{`[
+  { "name": "John Doe", "amount": 500, "group_name": "Group A", "mode": "Cash", "note": "Blessings", "date": "2025-10-21" },
+  { "name": "Jane", "amount": 1000, "group_name": "Group B", "mode": "UPI", "note": "", "date": "2025-10-22" }
+]`}
+            </div>
+            <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full border rounded p-2 h-40" />
+            <div className="flex justify-end gap-2 mt-3">
+              <button onClick={() => setImportText(JSON.stringify(exampleCollections, null, 2))} className="px-3 py-2 border rounded">Copy Example</button>
+              <button onClick={() => setIsImportCollectionsOpen(false)} className="px-3 py-2 border rounded">Cancel</button>
+              <button onClick={handleImportCollections} className="px-3 py-2 bg-blue-600 text-white rounded">Import</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Expenses Modal */}
+      {isImportExpensesOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Import Expenses (JSON)</h3>
+            <p className="text-sm text-gray-600 mb-2">Paste JSON array. Example format:</p>
+            <div className="bg-gray-50 p-3 rounded border text-xs mb-3">
+{`[
+  { "item": "Flowers", "pieces": 5, "price_per_piece": 50, "total_amount": 250, "category": "Decoration", "mode": "Cash", "note": "", "date": "2025-10-21" },
+  { "item": "Lights", "pieces": 2, "price_per_piece": 300, "total_amount": 600, "category": "Decoration", "mode": "UPI", "note": "extra cable", "date": "2025-10-22" }
+]`}
+            </div>
+            <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full border rounded p-2 h-40" />
+            <div className="flex justify-end gap-2 mt-3">
+              <button onClick={() => setImportText(JSON.stringify(exampleExpenses, null, 2))} className="px-3 py-2 border rounded">Copy Example</button>
+              <button onClick={() => setIsImportExpensesOpen(false)} className="px-3 py-2 border rounded">Cancel</button>
+              <button onClick={handleImportExpenses} className="px-3 py-2 bg-blue-600 text-white rounded">Import</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Festival Modal */}
+      {isDeleteFestivalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Permanently Delete Festival</h3>
+            <p className="text-sm text-red-600 mb-2">Warning: This cannot be undone. Download data before deleting.</p>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={deleteFestivalDownload} onChange={(e) => setDeleteFestivalDownload(e.target.checked)} /> Download data (JSON) before delete</label>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Admin Password</label>
+              <input type="password" value={deleteFestivalAdminPass} onChange={(e) => setDeleteFestivalAdminPass(e.target.value)} className="w-full border rounded px-3 py-2" />
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setIsDeleteFestivalOpen(false)} className="px-3 py-2 border rounded">Cancel</button>
+              <button onClick={handleDeleteFestival} className="px-3 py-2 bg-red-600 text-white rounded">Delete Permanently</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <DeleteConfirmModal
         isOpen={isDeleteModalOpen}

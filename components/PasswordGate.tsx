@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePasswordAuth } from '@/lib/hooks/usePasswordAuth';
+import { supabase } from '@/lib/supabase';
 import { Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -14,6 +15,14 @@ export default function PasswordGate({ children, code }: PasswordGateProps) {
   const { isAuthenticated, isLoading, requiresPassword, verifyPassword } = usePasswordAuth(code);
   const [password, setPassword] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
+  const [info, setInfo] = useState<{ name: string; organiser?: string | null; start?: string | null; end?: string | null; location?: string | null } | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('festivals').select('event_name, organiser, event_start_date, event_end_date, location').eq('code', code).maybeSingle();
+      if (data) setInfo({ name: data.event_name, organiser: data.organiser, start: data.event_start_date, end: data.event_end_date, location: data.location });
+    })();
+  }, [code]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +58,14 @@ export default function PasswordGate({ children, code }: PasswordGateProps) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full">
+          {info && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 text-sm">
+              <div className="font-semibold text-gray-800">{info.name}</div>
+              <div className="text-gray-600">{info.organiser ? `Organiser: ${info.organiser}` : null}</div>
+              <div className="text-gray-600">{info.location ? `Location: ${info.location}` : null}</div>
+              <div className="text-gray-600">{info.start || info.end ? `Dates: ${info.start || '—'} to ${info.end || '—'}` : null}</div>
+            </div>
+          )}
           <div className="flex justify-center mb-6">
             <div className="bg-blue-100 rounded-full p-4">
               <Lock className="w-8 h-8 text-blue-600" />

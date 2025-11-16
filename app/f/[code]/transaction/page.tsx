@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Festival, Collection, Expense, Stats, Transaction } from '@/types';
-import { calculateStats, combineTransactions, groupBy, groupByDate } from '@/lib/utils';
+import { calculateStats, combineTransactions, groupBy, groupByDateBetween } from '@/lib/utils';
 import PasswordGate from '@/components/PasswordGate';
 import BasicInfo from '@/components/BasicInfo';
 import StatsCards from '@/components/StatsCards';
@@ -114,8 +114,8 @@ export default function TransactionPage() {
   }, [expenses]);
 
   const dailyCollectionExpense = useMemo(() => {
-    const collectionsByDate = groupByDate(collections, 30);
-    const expensesByDate = groupByDate(expenses, 30);
+    const collectionsByDate = groupByDateBetween(collections, festival?.event_start_date || null, festival?.event_end_date || null);
+    const expensesByDate = groupByDateBetween(expenses, festival?.event_start_date || null, festival?.event_end_date || null);
 
     const dateMap = new Map<string, { collection: number; expense: number }>();
 
@@ -183,7 +183,7 @@ export default function TransactionPage() {
 
               <h2 className="text-2xl font-bold text-gray-800 mt-12 mb-6">Statistics</h2>
               <div className="space-y-6">
-                <CollectionVsExpenseChart collections={collections} expenses={expenses} />
+                <CollectionVsExpenseChart collections={collections} expenses={expenses} festivalStartDate={festival.event_start_date} festivalEndDate={festival.event_end_date} />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <PieChart data={collectionsByGroup} title="Collections by Group" />
@@ -197,7 +197,7 @@ export default function TransactionPage() {
 
                 <div className="bg-white rounded-lg shadow-md p-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                    Daily Collection & Expense (Last Month)
+                    Daily Collection & Expense (Festival Month Range)
                   </h3>
                   {dailyCollectionExpense.length === 0 ? (
                     <div className="h-64 flex items-center justify-center text-gray-500">

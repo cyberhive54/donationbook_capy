@@ -3,27 +3,34 @@
 import { useState, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Collection, Expense } from '@/types';
-import { groupByDate, filterByTimeRange } from '@/lib/utils';
+import { groupByDate, filterByTimeRange, groupByDateBetween } from '@/lib/utils';
 
 interface CollectionVsExpenseChartProps {
   collections: Collection[];
   expenses: Expense[];
+  festivalStartDate?: string | null;
+  festivalEndDate?: string | null;
 }
 
 export default function CollectionVsExpenseChart({
   collections,
   expenses,
+  festivalStartDate,
+  festivalEndDate,
 }: CollectionVsExpenseChartProps) {
   const [timeRange, setTimeRange] = useState<'all' | '7days' | '14days' | '1month'>('1month');
 
   const chartData = useMemo(() => {
-    const filteredCollections = filterByTimeRange(collections, timeRange);
-    const filteredExpenses = filterByTimeRange(expenses, timeRange);
+    let filteredCollections = filterByTimeRange(collections, timeRange);
+    let filteredExpenses = filterByTimeRange(expenses, timeRange);
 
-    const days = timeRange === 'all' ? 30 : timeRange === '7days' ? 7 : timeRange === '14days' ? 14 : 30;
-    
-    const collectionsByDate = groupByDate(filteredCollections, days);
-    const expensesByDate = groupByDate(filteredExpenses, days);
+    let collectionsByDate = groupByDate(filteredCollections, timeRange === '7days' ? 7 : timeRange === '14days' ? 14 : 30);
+    let expensesByDate = groupByDate(filteredExpenses, timeRange === '7days' ? 7 : timeRange === '14days' ? 14 : 30);
+
+    if (festivalStartDate && festivalEndDate) {
+      collectionsByDate = groupByDateBetween(collections, festivalStartDate, festivalEndDate);
+      expensesByDate = groupByDateBetween(expenses, festivalStartDate, festivalEndDate);
+    }
 
     const dateMap = new Map<string, { collection: number; expense: number }>();
 

@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Festival, Collection, Expense, Stats } from '@/types';
-import { calculateStats, groupBy, groupByDate } from '@/lib/utils';
+import { calculateStats, groupBy, groupByDateBetween } from '@/lib/utils';
 import PasswordGate from '@/components/PasswordGate';
 import BasicInfo from '@/components/BasicInfo';
 import StatsCards from '@/components/StatsCards';
@@ -93,8 +93,8 @@ export default function ExpensePage() {
   }, [expenses]);
 
   const dailyExpenses = useMemo(() => {
-    return groupByDate(expenses, 30);
-  }, [expenses]);
+    return groupByDateBetween(expenses, festival?.event_start_date || null, festival?.event_end_date || null);
+  }, [expenses, festival]);
 
   const topExpensiveItems = useMemo(() => {
     const sorted = [...expenses].sort((a, b) => Number(b.total_amount) - Number(a.total_amount));
@@ -151,7 +151,7 @@ export default function ExpensePage() {
 
               <h2 className="text-2xl font-bold text-gray-800 mt-12 mb-6">Statistics</h2>
               <div className="space-y-6">
-                <CollectionVsExpenseChart collections={collections} expenses={expenses} />
+                <CollectionVsExpenseChart collections={collections} expenses={expenses} festivalStartDate={festival.event_start_date} festivalEndDate={festival.event_end_date} />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <PieChart data={expensesByCategory} title="Expenses by Category" />
@@ -160,7 +160,7 @@ export default function ExpensePage() {
 
                 <BarChart
                   data={dailyExpenses}
-                  title="Daily Expense (Last Month)"
+                  title="Daily Expense (Festival Month Range)"
                   dataKey="amount"
                   xAxisKey="date"
                   color="#ef4444"

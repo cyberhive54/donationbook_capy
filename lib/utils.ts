@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 import { Collection, Expense, Stats, Transaction } from '@/types';
 
 export const formatCurrency = (amount: number): string => {
@@ -93,24 +93,45 @@ export const groupByDate = <T extends { date: string; amount?: number; total_amo
 ): { date: string; amount: number }[] => {
   const result: { [key: string]: number } = {};
   const now = new Date();
-  
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(now.getDate() - i);
-    const dateStr = format(date, 'yyyy-MM-dd');
-    result[dateStr] = 0;
+    const key = format(date, 'yyyy-MM-dd');
+    result[key] = 0;
   }
-  
   data.forEach(item => {
-    const dateStr = format(new Date(item.date), 'yyyy-MM-dd');
-    if (dateStr in result) {
+    const key = format(new Date(item.date), 'yyyy-MM-dd');
+    if (key in result) {
       const amount = 'amount' in item ? Number(item.amount) : Number(item.total_amount);
-      result[dateStr] += amount;
+      result[key] += amount;
     }
   });
-  
-  return Object.entries(result).map(([date, amount]) => ({
-    date: format(new Date(date), 'dd MMM'),
+  return Object.entries(result).map(([key, amount]) => ({
+    date: format(new Date(key), 'dd MMM'),
+    amount,
+  }));
+};
+
+export const groupByDateBetween = <T extends { date: string; amount?: number; total_amount?: number }>(
+  data: T[],
+  startDate?: string | null,
+  endDate?: string | null
+): { date: string; amount: number }[] => {
+  if (!startDate || !endDate) return groupByDate(data, 30);
+  const start = startOfMonth(new Date(startDate));
+  const end = endOfMonth(new Date(endDate));
+  const days = eachDayOfInterval({ start, end });
+  const result: Record<string, number> = {};
+  days.forEach(d => { result[format(d, 'yyyy-MM-dd')] = 0; });
+  data.forEach(item => {
+    const key = format(new Date(item.date), 'yyyy-MM-dd');
+    if (key in result) {
+      const amount = 'amount' in item ? Number(item.amount) : Number(item.total_amount);
+      result[key] += amount;
+    }
+  });
+  return Object.entries(result).map(([key, amount]) => ({
+    date: format(new Date(key), 'dd MMM'),
     amount,
   }));
 };
