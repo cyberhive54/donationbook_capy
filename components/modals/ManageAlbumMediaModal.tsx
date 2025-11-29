@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { X, Upload, Trash2 } from 'lucide-react';
+import { X, Upload, Trash2, FileText, Film, Music, FileIcon, Image as ImageIcon, Eye } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { MediaItem } from '@/types';
+import { formatFileSize, getFileSizeLimit, generateThumbnailFromVideo } from '@/lib/utils';
+import MediaViewerModal from './MediaViewerModal';
 
 interface ManageAlbumMediaModalProps {
   isOpen: boolean;
@@ -15,10 +17,21 @@ interface ManageAlbumMediaModalProps {
 
 type FilterType = 'all' | 'image' | 'video' | 'audio' | 'pdf' | 'other';
 
+interface UploadTask {
+  id: string;
+  file: File;
+  status: 'pending' | 'uploading' | 'completed' | 'failed';
+  progress: number;
+  error?: string;
+}
+
 export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festivalCode }: ManageAlbumMediaModalProps) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [filter, setFilter] = useState<FilterType>('all');
-  const [uploading, setUploading] = useState(false);
+  const [uploadQueue, setUploadQueue] = useState<UploadTask[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [viewingMedia, setViewingMedia] = useState<MediaItem | null>(null);
 
   const fetchItems = async () => {
     if (!albumId) return;
@@ -30,7 +43,12 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
     }
   };
 
-  useEffect(() => { if (isOpen) fetchItems(); }, [isOpen, albumId]);
+  useEffect(() => { 
+    if (isOpen) {
+      fetchItems();
+      setSelectedItems(new Set());
+    }
+  }, [isOpen, albumId]);
 
   const detectType = (mime: string): FilterType => {
     if (mime.startsWith('image/')) return 'image';
@@ -40,27 +58,49 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
     return 'other';
   };
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!albumId) return;
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    try {
-      for (const file of Array.from(files)) {
-        const path = `${festivalCode}/${albumId}/${Date.now()}-${file.name}`;
+  const processUploadQueue = async () => {
+    if (isUploading || !albumId) return;
+    
+    const pendingTasks = uploadQueue.filter(t => t.status === 'pending');
+    if (pendingTasks.length === 0) return;
+    
+    setIsUploading(true);
+    
+    for (const task of pendingTasks) {
+      setUploadQueue(prev => prev.map(t => 
+        t.id === task.id ? { ...t, status: 'uploading' as const } : t
+      ));
+      
+      try {
+        const file = task.file;
+        const limit = getFileSizeLimit(file.type);
         
-        console.log('Uploading to storage:', path);
-        const { error: upErr } = await supabase.storage.from('showcase').upload(path, file, { upsert: false });
-        if (upErr) {
-          console.error('Storage upload error:', upErr);
-          throw new Error(`Storage upload failed: ${upErr.message}`);
+        if (file.size > limit.bytes) {
+          throw new Error(`File too large. Max ${limit.label}`);
         }
+        
+        const path = `${festivalCode}/${albumId}/${Date.now()}-${file.name}`;
+        const { error: upErr } = await supabase.storage.from('showcase').upload(path, file, { upsert: false });
+        if (upErr) throw new Error(`Upload failed: ${upErr.message}`);
         
         const { data: pub } = supabase.storage.from('showcase').getPublicUrl(path);
         const url = pub?.publicUrl || '';
         const type = detectType(file.type);
         
-        console.log('Inserting media item:', { album_id: albumId, type, title: file.name, url });
+        let thumbnailUrl: string | null = null;
+        if (type === 'video') {
+          try {
+            const thumbBlob = await generateThumbnailFromVideo(file);
+            const thumbPath = `${festivalCode}/${albumId}/thumb-${Date.now()}.jpg`;
+            const thumbFile = await fetch(thumbBlob).then(r => r.blob());
+            await supabase.storage.from('showcase').upload(thumbPath, thumbFile);
+            const { data: thumbPub } = supabase.storage.from('showcase').getPublicUrl(thumbPath);
+            thumbnailUrl = thumbPub?.publicUrl || null;
+          } catch (e) {
+            console.warn('Thumbnail generation failed:', e);
+          }
+        }
+        
         const { error: insErr } = await supabase.from('media_items').insert({
           album_id: albumId,
           type,
@@ -68,22 +108,56 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
           url,
           mime_type: file.type,
           size_bytes: file.size,
+          thumbnail_url: thumbnailUrl,
         });
         
-        if (insErr) {
-          console.error('Media item insert error:', insErr);
-          throw new Error(`Database insert failed: ${insErr.message}`);
-        }
+        if (insErr) throw new Error(`Database insert failed: ${insErr.message}`);
+        
+        setUploadQueue(prev => prev.map(t => 
+          t.id === task.id ? { ...t, status: 'completed' as const, progress: 100 } : t
+        ));
+      } catch (e: any) {
+        console.error('Upload error:', e);
+        setUploadQueue(prev => prev.map(t => 
+          t.id === task.id ? { ...t, status: 'failed' as const, error: e.message } : t
+        ));
       }
-      toast.success('Uploaded successfully');
-      fetchItems();
-    } catch (e: any) {
-      console.error('Upload error:', e);
-      toast.error(e.message || 'Upload failed');
-    } finally {
-      setUploading(false);
-      (e.target as HTMLInputElement).value = '';
     }
+    
+    setIsUploading(false);
+    const failed = uploadQueue.filter(t => t.status === 'failed').length;
+    const completed = uploadQueue.filter(t => t.status === 'completed').length;
+    
+    if (failed === 0) {
+      toast.success(`${completed} file(s) uploaded successfully`);
+      setTimeout(() => setUploadQueue([]), 2000);
+    } else {
+      toast.error(`${failed} file(s) failed to upload`);
+    }
+    
+    fetchItems();
+  };
+
+  useEffect(() => {
+    if (uploadQueue.some(t => t.status === 'pending') && !isUploading) {
+      processUploadQueue();
+    }
+  }, [uploadQueue, isUploading]);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!albumId) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    const newTasks: UploadTask[] = Array.from(files).map(file => ({
+      id: `${Date.now()}-${Math.random()}`,
+      file,
+      status: 'pending' as const,
+      progress: 0,
+    }));
+    
+    setUploadQueue(prev => [...prev, ...newTasks]);
+    (e.target as HTMLInputElement).value = '';
   };
 
   const filtered = useMemo(() => items.filter(i => filter === 'all' ? true : i.type === filter), [items, filter]);
@@ -92,63 +166,242 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
     const { error } = await supabase.from('media_items').delete().eq('id', id);
     if (!error) {
       setItems(prev => prev.filter(i => i.id !== id));
+      setSelectedItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
       toast.success('Deleted');
     } else {
-      console.error('Delete media item error:', error);
       toast.error(`Failed to delete: ${error.message}`);
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleBulkDownload = async () => {
+    const selectedMediaItems = items.filter(item => selectedItems.has(item.id));
+    for (const item of selectedMediaItems) {
+      try {
+        const response = await fetch(item.url);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = item.title || 'download';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error('Download failed for:', item.title, error);
+      }
+    }
+    toast.success(`Downloaded ${selectedMediaItems.length} file(s)`);
+  };
+
+  const getMediaIcon = (type: FilterType) => {
+    switch (type) {
+      case 'image': return <ImageIcon className="w-6 h-6" />;
+      case 'video': return <Film className="w-6 h-6" />;
+      case 'audio': return <Music className="w-6 h-6" />;
+      case 'pdf': return <FileText className="w-6 h-6" />;
+      default: return <FileIcon className="w-6 h-6" />;
+    }
+  };
+
+  const selectedTotalSize = items
+    .filter(item => selectedItems.has(item.id))
+    .reduce((sum, item) => sum + (item.size_bytes || 0), 0);
+
   if (!isOpen || !albumId) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-xl font-bold text-gray-800">Manage Media</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <label className="px-3 py-2 border rounded-lg cursor-pointer flex items-center gap-2">
-                <Upload className="w-4 h-4" /> Upload Files
-                <input type="file" multiple accept="image/*,video/*,audio/*,application/pdf" onChange={handleUpload} className="hidden" disabled={uploading} />
-              </label>
-              <select value={filter} onChange={(e) => setFilter(e.target.value as FilterType)} className="px-3 py-2 border rounded-lg">
-                <option value="all">All</option>
-                <option value="image">Images</option>
-                <option value="video">Videos</option>
-                <option value="audio">Audio</option>
-                <option value="pdf">PDF</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            {uploading && <span className="text-sm text-blue-600">Uploading...</span>}
-          </div>
+  const completedUploads = uploadQueue.filter(t => t.status === 'completed').length;
+  const totalUploads = uploadQueue.length;
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {filtered.map(item => (
-              <div key={item.id} className="border rounded-lg overflow-hidden">
-                {item.type === 'image' ? (
-                  <img src={item.url} alt={item.title || ''} className="w-full h-36 object-cover" />
-                ) : (
-                  <div className="h-36 flex items-center justify-center bg-gray-100 text-sm text-gray-600">{item.type.toUpperCase()}</div>
-                )}
-                <div className="p-2 flex items-center justify-between">
-                  <div className="truncate text-sm" title={item.title}>{item.title}</div>
-                  <button onClick={() => handleDelete(item.id)} className="p-1 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4 text-red-600" /></button>
-                </div>
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b">
+            <h2 className="text-xl font-bold text-gray-800">Manage Media</h2>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X className="w-5 h-5" /></button>
+          </div>
+          
+          <div className="p-4 border-b space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <label className="px-3 py-2 border rounded-lg cursor-pointer flex items-center gap-2 hover:bg-gray-50">
+                  <Upload className="w-4 h-4" /> Upload Files
+                  <input 
+                    type="file" 
+                    multiple 
+                    accept="image/*,video/*,audio/*,application/pdf" 
+                    onChange={handleUpload} 
+                    className="hidden" 
+                    disabled={isUploading} 
+                  />
+                </label>
+                <select 
+                  value={filter} 
+                  onChange={(e) => setFilter(e.target.value as FilterType)} 
+                  className="px-3 py-2 border rounded-lg"
+                >
+                  <option value="all">All</option>
+                  <option value="image">Images</option>
+                  <option value="video">Videos</option>
+                  <option value="audio">Audio</option>
+                  <option value="pdf">PDF</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
-            ))}
-            {filtered.length === 0 && (
-              <div className="col-span-full text-center text-gray-500 py-8">
-                No media found. Upload files to get started.
+              
+              {selectedItems.size > 0 && (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-600">
+                    {selectedItems.size} selected · {formatFileSize(selectedTotalSize)}
+                  </span>
+                  <button 
+                    onClick={handleBulkDownload}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                  >
+                    Download Selected
+                  </button>
+                  <button 
+                    onClick={() => setSelectedItems(new Set())}
+                    className="px-3 py-2 border rounded-lg text-sm"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {uploadQueue.length > 0 && (
+              <div className="bg-blue-50 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-800">
+                    Uploading {completedUploads}/{totalUploads} files
+                  </span>
+                  <button 
+                    onClick={() => setUploadQueue([])}
+                    className="text-xs px-2 py-1 border rounded hover:bg-white"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {uploadQueue.map(task => (
+                    <div key={task.id} className="flex items-center justify-between text-xs bg-white rounded px-2 py-1">
+                      <span className="truncate flex-1">{task.file.name}</span>
+                      <span className="text-gray-500 ml-2">{formatFileSize(task.file.size)}</span>
+                      <span className={`ml-2 font-medium ${
+                        task.status === 'completed' ? 'text-green-600' : 
+                        task.status === 'failed' ? 'text-red-600' : 
+                        task.status === 'uploading' ? 'text-blue-600' : 
+                        'text-gray-500'
+                      }`}>
+                        {task.status === 'completed' ? '✓' : 
+                         task.status === 'failed' ? '✗' : 
+                         task.status === 'uploading' ? '↑' : '⋯'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {filtered.map(item => (
+                <div 
+                  key={item.id} 
+                  className={`border rounded-lg overflow-hidden relative group ${selectedItems.has(item.id) ? 'ring-2 ring-blue-500' : ''}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedItems.has(item.id)}
+                    onChange={() => toggleSelect(item.id)}
+                    className="absolute top-2 left-2 z-10 w-5 h-5 cursor-pointer"
+                  />
+                  
+                  <div 
+                    className="cursor-pointer"
+                    onClick={() => setViewingMedia(item)}
+                  >
+                    {item.type === 'image' ? (
+                      <img src={item.url} alt={item.title || ''} className="w-full h-36 object-cover" />
+                    ) : item.type === 'video' && item.thumbnail_url ? (
+                      <div className="relative">
+                        <img src={item.thumbnail_url} alt={item.title || ''} className="w-full h-36 object-cover" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <Film className="w-8 h-8 text-white" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-36 flex items-center justify-center bg-gray-100 text-gray-600">
+                        {getMediaIcon(item.type)}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="p-2">
+                    <div className="truncate text-xs font-medium" title={item.title}>{item.title}</div>
+                    <div className="text-xs text-gray-500">{formatFileSize(item.size_bytes)}</div>
+                  </div>
+                  
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <button 
+                      onClick={() => setViewingMedia(item)}
+                      className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(item.id)}
+                      className="p-1 bg-red-600 text-white rounded hover:bg-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {filtered.length === 0 && uploadQueue.length === 0 && (
+                <div className="col-span-full text-center text-gray-500 py-12">
+                  No media found. Upload files to get started.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+
+      <MediaViewerModal
+        isOpen={!!viewingMedia}
+        onClose={() => setViewingMedia(null)}
+        mediaItem={viewingMedia}
+        allItems={filtered}
+        onNavigate={(direction) => {
+          const currentIndex = filtered.findIndex(item => item.id === viewingMedia?.id);
+          if (direction === 'prev' && currentIndex > 0) {
+            setViewingMedia(filtered[currentIndex - 1]);
+          } else if (direction === 'next' && currentIndex < filtered.length - 1) {
+            setViewingMedia(filtered[currentIndex + 1]);
+          }
+        }}
+      />
+    </>
   );
 }

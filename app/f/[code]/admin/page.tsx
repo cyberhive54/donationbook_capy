@@ -3,8 +3,8 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Festival, Collection, Expense, Stats, Album } from '@/types';
-import { calculateStats } from '@/lib/utils';
+import { Festival, Collection, Expense, Stats, Album, MediaItem } from '@/types';
+import { calculateStats, calculateStorageStats, formatFileSize } from '@/lib/utils';
 import AdminPasswordGate from '@/components/AdminPasswordGate';
 import BasicInfo from '@/components/BasicInfo';
 import StatsCards from '@/components/StatsCards';
@@ -16,11 +16,11 @@ import AddExpenseModal from '@/components/modals/AddExpenseModal';
 import EditFestivalModal from '@/components/modals/EditFestivalModal';
 import AddEditAlbumModal from '@/components/modals/AddEditAlbumModal';
 import ManageAlbumMediaModal from '@/components/modals/ManageAlbumMediaModal';
+import StorageStatsModal from '@/components/modals/StorageStatsModal';
 import DeleteConfirmModal from '@/components/modals/DeleteConfirmModal';
 import { InfoSkeleton, CardSkeleton, TableSkeleton } from '@/components/Loader';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Eye, EyeOff, Palette } from 'lucide-react';
-import { getThemeStyles, getThemeClasses } from '@/lib/theme';
+import { Plus, Edit, Trash2, Eye, EyeOff, Palette, HardDrive } from 'lucide-react';
 
 function AdminPageContent() {
   const params = useParams<{ code: string }>();
@@ -41,7 +41,9 @@ function AdminPageContent() {
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [allMediaItems, setAllMediaItems] = useState<MediaItem[]>([]);
   const [isAlbumModalOpen, setIsAlbumModalOpen] = useState(false);
+  const [isStorageStatsOpen, setIsStorageStatsOpen] = useState(false);
   const [editingAlbum, setEditingAlbum] = useState<Album | null>(null);
   const [isManageMediaOpen, setIsManageMediaOpen] = useState(false);
   const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null);
@@ -123,6 +125,14 @@ function AdminPageContent() {
       setCollectionModes(fetchedCollectionModes);
       setExpenseModes(fetchedExpenseModes);
       setAlbums(albumsRes.data || []);
+      
+      const albumIds = (albumsRes.data || []).map((a: Album) => a.id);
+      if (albumIds.length > 0) {
+        const { data: mediaData } = await supabase.from('media_items').select('*').in('album_id', albumIds);
+        setAllMediaItems((mediaData as MediaItem[]) || []);
+      } else {
+        setAllMediaItems([]);
+      }
 
       setThemeForm({
         theme_primary_color: fest.theme_primary_color || '#2563eb',
@@ -1083,6 +1093,37 @@ function AdminPageContent() {
 
               <div className="theme-card bg-white rounded-lg shadow-md p-6 mt-8">
                 <h3 className="text-lg font-bold text-gray-800 mb-4">Showcase</h3>
+                {allMediaItems.length > 0 && (() => {
+                  const storageStats = calculateStorageStats(allMediaItems);
+                  return (
+                    <div 
+                      className="mb-4 cursor-pointer hover:bg-gray-50 p-4 rounded-lg border transition-colors" 
+                      onClick={() => setIsStorageStatsOpen(true)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <HardDrive className="w-5 h-5 text-gray-600" />
+                          <span className="text-sm font-medium text-gray-800">Storage Usage</span>
+                        </div>
+                        <span className="text-sm text-gray-600">
+                          {formatFileSize(storageStats.totalBytes)} / {formatFileSize(storageStats.maxBytes)}
+                          <span className="ml-2 text-xs">({storageStats.percentage.toFixed(1)}%)</span>
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all ${
+                            storageStats.percentage > 90 ? 'bg-red-500' : 
+                            storageStats.percentage > 75 ? 'bg-yellow-500' : 
+                            'bg-blue-500'
+                          }`}
+                          style={{ width: `${storageStats.percentage}%` }}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">Click to view detailed storage breakdown</div>
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-sm text-gray-600">Create albums and upload photos, videos, audio, and PDFs. Users can view under Showcase.</p>
                   <button
@@ -1094,14 +1135,19 @@ function AdminPageContent() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {albums.map(a => (
-                    <div key={a.id} className="border rounded-lg p-3 bg-white">
-                      <div className="font-semibold text-gray-800 truncate">{a.title}</div>
-                      <div className="text-xs text-gray-500">{a.year || 'Year N/A'}</div>
-                      <div className="text-sm text-gray-600 mt-1 line-clamp-2">{a.description}</div>
-                      <div className="flex gap-2 mt-3">
-                        <button onClick={() => { setEditingAlbum(a); setIsAlbumModalOpen(true); }} className="px-3 py-1 border rounded text-sm">Edit</button>
-                        <button onClick={async () => { await supabase.from('albums').delete().eq('id', a.id); toast.success('Album deleted'); fetchData(); }} className="px-3 py-1 border rounded text-sm">Delete</button>
-                        <button onClick={() => { setActiveAlbumId(a.id); setIsManageMediaOpen(true); }} className="px-3 py-1 border rounded text-sm">Manage Media</button>
+                    <div key={a.id} className="border rounded-lg overflow-hidden bg-white">
+                      {a.cover_url && (
+                        <img src={a.cover_url} alt={a.title} className="w-full h-32 object-cover" />
+                      )}
+                      <div className="p-3">
+                        <div className="font-semibold text-gray-800 truncate">{a.title}</div>
+                        <div className="text-xs text-gray-500">{a.year || 'Year N/A'}</div>
+                        <div className="text-sm text-gray-600 mt-1 line-clamp-2">{a.description}</div>
+                        <div className="flex gap-2 mt-3">
+                          <button onClick={() => { setEditingAlbum(a); setIsAlbumModalOpen(true); }} className="px-3 py-1 border rounded text-sm hover:bg-gray-50">Edit</button>
+                          <button onClick={async () => { await supabase.from('albums').delete().eq('id', a.id); toast.success('Album deleted'); fetchData(); }} className="px-3 py-1 border rounded text-sm hover:bg-gray-50">Delete</button>
+                          <button onClick={() => { setActiveAlbumId(a.id); setIsManageMediaOpen(true); }} className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">Manage Media</button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1138,6 +1184,7 @@ function AdminPageContent() {
         onClose={() => setIsAlbumModalOpen(false)}
         onSuccess={fetchData}
         festivalId={festival?.id || ''}
+        festivalCode={festival?.code || ''}
         initial={editingAlbum}
       />
 
@@ -1146,6 +1193,13 @@ function AdminPageContent() {
         onClose={() => setIsManageMediaOpen(false)}
         albumId={activeAlbumId}
         festivalCode={festival?.code || ''}
+      />
+      
+      <StorageStatsModal
+        isOpen={isStorageStatsOpen}
+        onClose={() => setIsStorageStatsOpen(false)}
+        allMediaItems={allMediaItems}
+        albums={albums}
       />
 
       <AddCollectionModal
