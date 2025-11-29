@@ -22,6 +22,8 @@ import { InfoSkeleton, CardSkeleton, TableSkeleton } from '@/components/Loader';
 import toast from 'react-hot-toast';
 import { Plus, Edit, Trash2, Eye, EyeOff, Palette, HardDrive } from 'lucide-react';
 
+import { getThemeStyles, getThemeClasses } from '@/lib/theme';
+
 function AdminPageContent() {
   const params = useParams<{ code: string }>();
   const code = (params?.code as string) || '';
