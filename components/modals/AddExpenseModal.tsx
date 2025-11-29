@@ -167,6 +167,8 @@ export default function AddExpenseModal({
             mode: forms[0].mode,
             note: forms[0].note.trim() || null,
             date: forms[0].date,
+          time_hour: parseInt(forms[0].time_hour) || 0,
+          time_minute: parseInt(forms[0].time_minute) || 0,
           })
           .eq('id', editData.id);
 
@@ -355,6 +357,36 @@ export default function AddExpenseModal({
                     onChange={(e) => updateForm(index, 'date', e.target.value)}
                     min={festivalStartDate || ''}
                     max={festivalEndDate || ''}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Hour <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={form.time_hour}
+                    onChange={(e) => updateForm(index, 'time_hour', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Minute <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={form.time_minute}
+                    onChange={(e) => updateForm(index, 'time_minute', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />

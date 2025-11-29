@@ -211,6 +211,40 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
     toast.success(`Downloaded ${selectedMediaItems.length} file(s)`);
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedItems.size === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete ${selectedItems.size} selected item(s)? This action cannot be undone.`)) {
+      return;
+    }
+    
+    const selectedIds = Array.from(selectedItems);
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const id of selectedIds) {
+      const { error } = await supabase.from('media_items').delete().eq('id', id);
+      if (!error) {
+        successCount++;
+      } else {
+        failCount++;
+        console.error('Delete failed for:', id, error);
+      }
+    }
+    
+    if (successCount > 0) {
+      setItems(prev => prev.filter(i => !selectedIds.includes(i.id)));
+      setSelectedItems(new Set());
+      toast.success(`Deleted ${successCount} item(s)`);
+    }
+    
+    if (failCount > 0) {
+      toast.error(`Failed to delete ${failCount} item(s)`);
+    }
+    
+    fetchItems();
+  };
+
   const getMediaIcon = (type: FilterType) => {
     switch (type) {
       case 'image': return <ImageIcon className="w-6 h-6" />;
@@ -277,6 +311,12 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
                     className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
                   >
                     Download Selected
+                  </button>
+                  <button 
+                    onClick={handleBulkDelete}
+                    className="px-3 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
+                  >
+                    Delete Selected
                   </button>
                   <button 
                     onClick={() => setSelectedItems(new Set())}

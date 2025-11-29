@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Expense } from '@/types';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import { Edit, Trash2, Search } from 'lucide-react';
 
 interface ExpenseTableProps {
@@ -214,7 +214,7 @@ export default function ExpenseTable({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{item.note || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900">{formatDate(item.date)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900">{formatDateTime(item.date, item.time_hour, item.time_minute)}</td>
                   {isAdmin && (
                     <td className="px-4 py-3 text-sm">
                       <div className="flex gap-2">

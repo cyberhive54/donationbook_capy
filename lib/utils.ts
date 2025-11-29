@@ -18,6 +18,25 @@ export const formatDate = (date: string): string => {
   }
 };
 
+
+export const formatDateTime = (date: string, hour?: number, minute?: number): string => {
+  try {
+    const dateStr = format(new Date(date), 'dd MMM yyyy');
+    if (hour !== undefined && minute !== undefined) {
+      const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+      return `${dateStr} ${timeStr}`;
+    }
+    return dateStr;
+  } catch (error) {
+    return date;
+  }
+};
+
+export const formatTimeOnly = (hour?: number, minute?: number): string => {
+  if (hour === undefined || minute === undefined) return '';
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+};
+
 export const formatFileSize = (bytes: number | null | undefined): string => {
   if (!bytes || bytes === 0) return '0 B';
   const k = 1024;
@@ -80,6 +99,8 @@ export const combineTransactions = (
     mode: c.mode,
     note: c.note,
     date: c.date,
+    time_hour: c.time_hour,
+    time_minute: c.time_minute,
     created_at: c.created_at,
   }));
   
@@ -92,12 +113,23 @@ export const combineTransactions = (
     mode: e.mode,
     note: e.note,
     date: e.date,
+    time_hour: e.time_hour,
+    time_minute: e.time_minute,
     created_at: e.created_at,
   }));
   
-  return [...collectionTxns, ...expenseTxns].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
+  return [...collectionTxns, ...expenseTxns].sort((a, b) => {
+    const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
+    if (dateCompare !== 0) return dateCompare;
+    
+    const aHour = a.time_hour || 0;
+    const bHour = b.time_hour || 0;
+    if (bHour !== aHour) return bHour - aHour;
+    
+    const aMinute = a.time_minute || 0;
+    const bMinute = b.time_minute || 0;
+    return bMinute - aMinute;
+  });
 };
 
 export const filterByTimeRange = <T extends { date: string }>(
