@@ -55,7 +55,7 @@ export default function CollectionVsExpenseChart({
   }, [collections, expenses, timeRange]);
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="theme-card bg-white rounded-lg shadow-md p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
         <h3 className="text-lg font-semibold text-gray-800">Collection vs Expense</h3>
         <select

@@ -82,7 +82,7 @@ export default function ExpenseTable({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="theme-card bg-white rounded-lg shadow-md p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div className="flex flex-wrap gap-2">
           <select
@@ -146,7 +146,7 @@ export default function ExpenseTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full theme-table">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">

@@ -18,7 +18,7 @@ export default function BarChart({
   color = '#3b82f6',
 }: BarChartProps) {
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="theme-card bg-white rounded-lg shadow-md p-6">
       <h3 className="text-lg font-semibold text-gray-800 mb-4">{title}</h3>
       
       {data.length === 0 ? (

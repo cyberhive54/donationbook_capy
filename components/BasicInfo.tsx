@@ -13,7 +13,7 @@ interface BasicInfoProps {
 export default function BasicInfo({ basicInfo, showEditButton = false, onEdit }: BasicInfoProps) {
   if (!basicInfo) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+      <div className="theme-card bg-white rounded-lg shadow-md p-6 mb-6">
         <p className="text-center text-gray-500">No event information available</p>
       </div>
     );

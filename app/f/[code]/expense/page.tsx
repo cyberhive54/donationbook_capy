@@ -15,7 +15,7 @@ import PieChart from '@/components/charts/PieChart';
 import BarChart from '@/components/charts/BarChart';
 import { InfoSkeleton, CardSkeleton, TableSkeleton, ChartSkeleton } from '@/components/Loader';
 import toast from 'react-hot-toast';
-import { getThemeStyles } from '@/lib/theme';
+import { getThemeStyles, getThemeClasses } from '@/lib/theme';
 
 export default function ExpensePage() {
   const params = useParams<{ code: string }>();
@@ -112,10 +112,11 @@ export default function ExpensePage() {
     : { backgroundColor: festival?.theme_bg_color || '#f8fafc' };
 
   const themeStyles = getThemeStyles(festival);
+  const themeClasses = getThemeClasses(festival);
 
   return (
     <PasswordGate code={code}>
-      <div className="min-h-screen pb-24" style={{ ...bgStyle, ...themeStyles }}>
+      <div className={`min-h-screen pb-24 ${themeClasses}`} style={{ ...bgStyle, ...themeStyles }}>
         <div className="max-w-7xl mx-auto px-4 py-6">
           {loading ? (
             <>
@@ -128,7 +129,7 @@ export default function ExpensePage() {
               </div>
             </>
           ) : !festival ? (
-            <div className="bg-white rounded-lg shadow-md p-8 text-center">
+            <div className="theme-card bg-white rounded-lg shadow-md p-8 text-center">
               <p className="text-gray-700">Festival not found.</p>
             </div>
           ) : (

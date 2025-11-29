@@ -15,7 +15,7 @@ import PieChart from '@/components/charts/PieChart';
 import { InfoSkeleton, CardSkeleton, TableSkeleton, ChartSkeleton } from '@/components/Loader';
 import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { getThemeStyles } from '@/lib/theme';
+import { getThemeStyles, getThemeClasses } from '@/lib/theme';
 import { format } from 'date-fns';
 
 export default function TransactionPage() {
@@ -144,10 +144,11 @@ export default function TransactionPage() {
     : { backgroundColor: festival?.theme_bg_color || '#f8fafc' };
 
   const themeStyles = getThemeStyles(festival);
+  const themeClasses = getThemeClasses(festival);
 
   return (
     <PasswordGate code={code}>
-      <div className="min-h-screen pb-24" style={{ ...bgStyle, ...themeStyles }}>
+      <div className={`min-h-screen pb-24 ${themeClasses}`} style={{ ...bgStyle, ...themeStyles }}>
         <div className="max-w-7xl mx-auto px-4 py-6">
           {loading ? (
             <>
@@ -160,7 +161,7 @@ export default function TransactionPage() {
               </div>
             </>
           ) : !festival ? (
-            <div className="bg-white rounded-lg shadow-md p-8 text-center">
+            <div className="theme-card bg-white rounded-lg shadow-md p-8 text-center">
               <p className="text-gray-700">Festival not found.</p>
             </div>
           ) : (
@@ -195,7 +196,7 @@ export default function TransactionPage() {
                   <PieChart data={expensesByMode} title="Expenses by Mode" />
                 </div>
 
-                <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="theme-card bg-white rounded-lg shadow-md p-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">
                     Daily Collection & Expense (Festival Month Range)
                   </h3>

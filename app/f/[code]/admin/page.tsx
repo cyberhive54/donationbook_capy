@@ -20,7 +20,7 @@ import DeleteConfirmModal from '@/components/modals/DeleteConfirmModal';
 import { InfoSkeleton, CardSkeleton, TableSkeleton } from '@/components/Loader';
 import toast from 'react-hot-toast';
 import { Plus, Edit, Trash2, Eye, EyeOff, Palette } from 'lucide-react';
-import { getThemeStyles } from '@/lib/theme';
+import { getThemeStyles, getThemeClasses } from '@/lib/theme';
 
 function AdminPageContent() {
   const params = useParams<{ code: string }>();
@@ -361,6 +361,7 @@ function AdminPageContent() {
     : { backgroundColor: festival?.theme_bg_color || '#f8fafc' };
 
   const themeStyles = getThemeStyles(festival);
+  const themeClasses = getThemeClasses(festival);
 
   const normalize = (s: string) => s?.trim().toLowerCase();
 
@@ -547,7 +548,7 @@ function AdminPageContent() {
   };
 
   return (
-    <div className="min-h-screen pb-24" style={{ ...bgStyle, ...themeStyles }}>
+    <div className={`min-h-screen pb-24 ${themeClasses}`} style={{ ...bgStyle, ...themeStyles }}>
       <div className="max-w-7xl mx-auto px-4 py-6">
         {loading ? (
           <>
@@ -556,12 +557,12 @@ function AdminPageContent() {
             <TableSkeleton rows={5} />
           </>
         ) : !festival ? (
-          <div className="bg-white rounded-lg shadow-md p-8 text-center">
+          <div className="theme-card bg-white rounded-lg shadow-md p-8 text-center">
             <p className="text-gray-700">Festival not found.</p>
           </div>
         ) : (
           <>
-            <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+            <div className="theme-card bg-white rounded-lg shadow-md p-4 mb-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Festival Code</p>
@@ -686,7 +687,7 @@ function AdminPageContent() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="theme-card bg-white rounded-lg shadow-md p-6">
                   <h3 className="text-lg font-bold text-gray-800 mb-4">Collection Settings</h3>
 
                   <div className="mb-6">
@@ -756,7 +757,7 @@ function AdminPageContent() {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="theme-card bg-white rounded-lg shadow-md p-6">
                   <h3 className="text-lg font-bold text-gray-800 mb-4">Expense Settings</h3>
 
                   <div className="mb-6">
@@ -827,7 +828,7 @@ function AdminPageContent() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="theme-card bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-bold text-gray-800 mb-4">User Password</h3>
                 {editingUserPassword ? (
                   <div className="flex gap-2">
@@ -875,7 +876,7 @@ function AdminPageContent() {
                 )}
               </div>
 
-              <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="theme-card bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-bold text-gray-800 mb-4">Admin Password</h3>
                 {editingAdminPassword ? (
                   <div className="flex gap-2">
@@ -923,7 +924,7 @@ function AdminPageContent() {
                 )}
               </div>
 
-              <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="theme-card bg-white rounded-lg shadow-md p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-bold text-gray-800">Theme & Appearance</h3>
                   <button
@@ -1080,7 +1081,7 @@ function AdminPageContent() {
                 )}
               </div>
 
-              <div className="bg-white rounded-lg shadow-md p-6 mt-8">
+              <div className="theme-card bg-white rounded-lg shadow-md p-6 mt-8">
                 <h3 className="text-lg font-bold text-gray-800 mb-4">Showcase</h3>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-sm text-gray-600">Create albums and upload photos, videos, audio, and PDFs. Users can view under Showcase.</p>

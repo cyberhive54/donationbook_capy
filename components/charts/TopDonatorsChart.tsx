@@ -36,7 +36,7 @@ export default function TopDonatorsChart({ collections, topN = 5 }: TopDonatorsC
   }, [collections, topN]);
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="theme-card bg-white rounded-lg shadow-md p-6">
       <h3 className="text-lg font-semibold text-gray-800 mb-4">Top {topN} Donators</h3>
       
       {topDonators.length === 0 ? (
