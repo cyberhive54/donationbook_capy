@@ -47,9 +47,11 @@ export default function AddEditAlbumModal({ isOpen, onClose, onSuccess, festival
           title: title.trim(),
           description: description.trim() || null,
           year: year === '' ? null : Number(year),
-          updated_at: new Date().toISOString(),
         }).eq('id', initial.id);
-        if (error) throw error;
+        if (error) {
+          console.error('Album update error:', error);
+          throw error;
+        }
         toast.success('Album updated');
       } else {
         const { error } = await supabase.from('albums').insert({
@@ -58,13 +60,17 @@ export default function AddEditAlbumModal({ isOpen, onClose, onSuccess, festival
           description: description.trim() || null,
           year: year === '' ? null : Number(year),
         });
-        if (error) throw error;
+        if (error) {
+          console.error('Album insert error:', error);
+          throw error;
+        }
         toast.success('Album created');
       }
       onSuccess();
       onClose();
-    } catch (e) {
-      toast.error('Failed to save album');
+    } catch (e: any) {
+      console.error('Save album error:', e);
+      toast.error(e.message || 'Failed to save album');
     } finally {
       setIsLoading(false);
     }

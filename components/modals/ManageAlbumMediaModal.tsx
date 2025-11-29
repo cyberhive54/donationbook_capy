@@ -23,7 +23,11 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
   const fetchItems = async () => {
     if (!albumId) return;
     const { data, error } = await supabase.from('media_items').select('*').eq('album_id', albumId).order('created_at', { ascending: false });
-    if (!error) setItems(data as any);
+    if (error) {
+      console.error('Fetch media items error:', error);
+    } else {
+      setItems(data as MediaItem[]);
+    }
   };
 
   useEffect(() => { if (isOpen) fetchItems(); }, [isOpen, albumId]);
@@ -44,11 +48,19 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
     try {
       for (const file of Array.from(files)) {
         const path = `${festivalCode}/${albumId}/${Date.now()}-${file.name}`;
+        
+        console.log('Uploading to storage:', path);
         const { error: upErr } = await supabase.storage.from('showcase').upload(path, file, { upsert: false });
-        if (upErr) throw upErr;
+        if (upErr) {
+          console.error('Storage upload error:', upErr);
+          throw new Error(`Storage upload failed: ${upErr.message}`);
+        }
+        
         const { data: pub } = supabase.storage.from('showcase').getPublicUrl(path);
         const url = pub?.publicUrl || '';
         const type = detectType(file.type);
+        
+        console.log('Inserting media item:', { album_id: albumId, type, title: file.name, url });
         const { error: insErr } = await supabase.from('media_items').insert({
           album_id: albumId,
           type,
@@ -57,11 +69,16 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
           mime_type: file.type,
           size_bytes: file.size,
         });
-        if (insErr) throw insErr;
+        
+        if (insErr) {
+          console.error('Media item insert error:', insErr);
+          throw new Error(`Database insert failed: ${insErr.message}`);
+        }
       }
       toast.success('Uploaded successfully');
       fetchItems();
     } catch (e: any) {
+      console.error('Upload error:', e);
       toast.error(e.message || 'Upload failed');
     } finally {
       setUploading(false);
@@ -76,7 +93,10 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
     if (!error) {
       setItems(prev => prev.filter(i => i.id !== id));
       toast.success('Deleted');
-    } else toast.error('Failed to delete');
+    } else {
+      console.error('Delete media item error:', error);
+      toast.error(`Failed to delete: ${error.message}`);
+    }
   };
 
   if (!isOpen || !albumId) return null;
@@ -104,6 +124,7 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
                 <option value="other">Other</option>
               </select>
             </div>
+            {uploading && <span className="text-sm text-blue-600">Uploading...</span>}
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -120,6 +141,11 @@ export default function ManageAlbumMediaModal({ isOpen, onClose, albumId, festiv
                 </div>
               </div>
             ))}
+            {filtered.length === 0 && (
+              <div className="col-span-full text-center text-gray-500 py-8">
+                No media found. Upload files to get started.
+              </div>
+            )}
           </div>
         </div>
       </div>
