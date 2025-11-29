@@ -11,14 +11,39 @@ ALTER TABLE expenses
 ADD COLUMN IF NOT EXISTS time_hour INTEGER DEFAULT 0,
 ADD COLUMN IF NOT EXISTS time_minute INTEGER DEFAULT 0;
 
--- Add constraints to ensure valid time values
-ALTER TABLE collections
-ADD CONSTRAINT IF NOT EXISTS collections_time_hour_check CHECK (time_hour >= 0 AND time_hour <= 23),
-ADD CONSTRAINT IF NOT EXISTS collections_time_minute_check CHECK (time_minute >= 0 AND time_minute <= 59);
+-- Add constraints to ensure valid time values (using DO block to handle if exists)
+DO $$ 
+BEGIN
+  -- Constraints for collections
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'collections_time_hour_check'
+  ) THEN
+    ALTER TABLE collections ADD CONSTRAINT collections_time_hour_check 
+    CHECK (time_hour >= 0 AND time_hour <= 23);
+  END IF;
 
-ALTER TABLE expenses
-ADD CONSTRAINT IF NOT EXISTS expenses_time_hour_check CHECK (time_hour >= 0 AND time_hour <= 23),
-ADD CONSTRAINT IF NOT EXISTS expenses_time_minute_check CHECK (time_minute >= 0 AND time_minute <= 59);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'collections_time_minute_check'
+  ) THEN
+    ALTER TABLE collections ADD CONSTRAINT collections_time_minute_check 
+    CHECK (time_minute >= 0 AND time_minute <= 59);
+  END IF;
+
+  -- Constraints for expenses
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'expenses_time_hour_check'
+  ) THEN
+    ALTER TABLE expenses ADD CONSTRAINT expenses_time_hour_check 
+    CHECK (time_hour >= 0 AND time_hour <= 23);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'expenses_time_minute_check'
+  ) THEN
+    ALTER TABLE expenses ADD CONSTRAINT expenses_time_minute_check 
+    CHECK (time_minute >= 0 AND time_minute <= 59);
+  END IF;
+END $$;
 
 -- Create indexes for time-based queries
 CREATE INDEX IF NOT EXISTS idx_collections_datetime ON collections(date DESC, time_hour DESC, time_minute DESC);
