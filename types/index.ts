@@ -8,12 +8,18 @@ export interface Festival {
   location?: string;
   event_start_date?: string;
   event_end_date?: string;
+  ce_start_date?: string; // Collection/Expense start date (required)
+  ce_end_date?: string; // Collection/Expense end date (required)
+  ce_dates_updated_at?: string;
   other_data?: Record<string, any>;
-  requires_user_password: boolean;
+  requires_password: boolean; // Whether password is required to view
+  requires_user_password: boolean; // Legacy field
   user_password?: string;
   user_password_updated_at?: string;
   admin_password?: string;
   admin_password_updated_at?: string;
+  super_admin_password?: string; // New super admin password
+  super_admin_password_updated_at?: string;
   theme_primary_color?: string;
   theme_secondary_color?: string;
   theme_bg_color?: string;
@@ -144,4 +150,79 @@ export interface Password {
   user_password: string;
   admin_password: string;
   updated_at?: string;
+}
+
+// Access Logging & Multiple Passwords System
+export interface AccessLog {
+  id: string;
+  festival_id: string;
+  visitor_name: string;
+  access_method: 'password_modal' | 'direct_link';
+  password_used: string | null;
+  accessed_at: string;
+  user_agent?: string | null;
+  ip_address?: string | null;
+  session_id?: string | null;
+}
+
+export interface FestivalPassword {
+  id: string;
+  festival_id: string;
+  password: string;
+  password_label?: string | null;
+  is_active: boolean;
+  created_at: string;
+  created_by?: string | null;
+  last_used_at?: string | null;
+  usage_count: number;
+}
+
+export interface VisitorStats {
+  festival_id: string;
+  festival_code: string;
+  event_name: string;
+  unique_visitors: number;
+  total_visits: number;
+  last_visit?: string | null;
+  total_visitors: number;
+  last_visitor_name?: string | null;
+  last_visitor_at?: string | null;
+}
+
+export interface UserSession {
+  authenticated: boolean;
+  date: string;
+  token: string;
+  visitorName: string;
+  sessionId: string;
+  accessMethod: 'password_modal' | 'direct_link';
+  passwordUsed: string;
+  loggedAt: string;
+}
+
+// Date validation and out-of-range transaction info
+export interface OutOfRangeTransactions {
+  collections_out_of_range: number;
+  expenses_out_of_range: number;
+  earliest_collection_date: string | null;
+  latest_collection_date: string | null;
+  earliest_expense_date: string | null;
+  latest_expense_date: string | null;
+}
+
+export interface FestivalDateInfo {
+  festival_id: string;
+  festival_code: string;
+  event_name: string;
+  ce_start_date: string | null;
+  ce_end_date: string | null;
+  event_start_date: string | null;
+  event_end_date: string | null;
+  requires_password: boolean;
+  has_ce_dates: boolean;
+  dates_valid: boolean;
+  total_collections: number;
+  total_expenses: number;
+  collections_out_of_range: number;
+  expenses_out_of_range: number;
 }

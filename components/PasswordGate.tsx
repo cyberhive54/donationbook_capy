@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePasswordAuth } from '@/lib/hooks/usePasswordAuth';
 import { supabase } from '@/lib/supabase';
-import { Lock } from 'lucide-react';
+import { Lock, User } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface PasswordGateProps {
@@ -12,8 +12,9 @@ interface PasswordGateProps {
 }
 
 export default function PasswordGate({ children, code }: PasswordGateProps) {
-  const { isAuthenticated, isLoading, requiresPassword, verifyPassword } = usePasswordAuth(code);
+  const { isAuthenticated, isLoading, requiresPassword, verifyPassword, storedName } = usePasswordAuth(code);
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [info, setInfo] = useState<{ name: string; organiser?: string | null; start?: string | null; end?: string | null; location?: string | null } | null>(null);
 
@@ -24,15 +25,28 @@ export default function PasswordGate({ children, code }: PasswordGateProps) {
     })();
   }, [code]);
 
+  // Pre-fill name from localStorage
+  useEffect(() => {
+    if (storedName) {
+      setName(storedName);
+    }
+  }, [storedName]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!name.trim()) {
+      toast.error('Please enter your name');
+      return;
+    }
+    
     if (!password.trim()) {
-      toast.error('Please enter a password');
+      toast.error('Please enter password');
       return;
     }
 
     setIsVerifying(true);
-    const isValid = await verifyPassword(password);
+    const isValid = await verifyPassword(password, name);
     setIsVerifying(false);
 
     if (isValid) {
@@ -73,28 +87,62 @@ export default function PasswordGate({ children, code }: PasswordGateProps) {
           </div>
           
           <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
-            Please Enter Password to View Content
+            Enter Your Details
           </h2>
           <p className="text-center text-gray-600 mb-6">
-            Ask admin for password
+            Please provide your name and password to continue
           </p>
 
-          <form onSubmit={handleSubmit}>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-              disabled={isVerifying}
-            />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Your Name <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <User className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Enter your name"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isVerifying}
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Password <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isVerifying}
+                  required
+                />
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Ask admin for password
+              </p>
+            </div>
             
             <button
               type="submit"
               disabled={isVerifying}
               className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              {isVerifying ? 'Verifying...' : 'Submit'}
+              {isVerifying ? 'Verifying...' : 'Continue'}
             </button>
           </form>
         </div>

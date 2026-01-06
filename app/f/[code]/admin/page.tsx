@@ -72,6 +72,10 @@ function AdminPageContent() {
   const [editingAdminPassword, setEditingAdminPassword] = useState(false);
   const [newAdminPassword, setNewAdminPassword] = useState('');
 
+  const [showSuperAdminPassword, setShowSuperAdminPassword] = useState(false);
+  const [editingSuperAdminPassword, setEditingSuperAdminPassword] = useState(false);
+  const [newSuperAdminPassword, setNewSuperAdminPassword] = useState('');
+
   const [showThemeEditor, setShowThemeEditor] = useState(false);
   const [themeForm, setThemeForm] = useState({
     theme_primary_color: '#2563eb',
@@ -336,6 +340,26 @@ function AdminPageContent() {
       toast.success('Admin password updated');
       setNewAdminPassword('');
       setEditingAdminPassword(false);
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to update password');
+    }
+  };
+
+  const handleUpdateSuperAdminPassword = async () => {
+    if (!newSuperAdminPassword.trim() || !festival) return;
+    try {
+      const { error } = await supabase
+        .from('festivals')
+        .update({
+          super_admin_password: newSuperAdminPassword.trim(),
+          super_admin_password_updated_at: new Date().toISOString(),
+        })
+        .eq('id', festival.id);
+      if (error) throw error;
+      toast.success('Super Admin password updated');
+      setNewSuperAdminPassword('');
+      setEditingSuperAdminPassword(false);
       fetchData();
     } catch (error) {
       toast.error('Failed to update password');
@@ -890,6 +914,7 @@ function AdminPageContent() {
 
               <div className="theme-card bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-bold text-gray-800 mb-4">Admin Password</h3>
+                <p className="text-sm text-gray-600 mb-3">For managing collections and expenses</p>
                 {editingAdminPassword ? (
                   <div className="flex gap-2">
                     <input
@@ -933,6 +958,68 @@ function AdminPageContent() {
                       <Edit className="w-5 h-5" />
                     </button>
                   </div>
+                )}
+                {festival.admin_password_updated_at && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Last updated: {new Date(festival.admin_password_updated_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
+
+              <div className="theme-card bg-white rounded-lg shadow-md p-6 border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
+                <div className="flex items-center gap-2 mb-4">
+                  <h3 className="text-lg font-bold text-purple-900">Super Admin Password</h3>
+                  <span className="px-2 py-1 bg-purple-600 text-white text-xs rounded-full">Advanced</span>
+                </div>
+                <p className="text-sm text-purple-700 mb-3">For future advanced features and analytics access</p>
+                {editingSuperAdminPassword ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newSuperAdminPassword}
+                      onChange={(e) => setNewSuperAdminPassword(e.target.value)}
+                      placeholder="Enter new super admin password"
+                      className="flex-1 px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    <button
+                      onClick={handleUpdateSuperAdminPassword}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingSuperAdminPassword(false);
+                        setNewSuperAdminPassword('');
+                      }}
+                      className="px-4 py-2 border border-purple-300 rounded-lg hover:bg-purple-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 px-4 py-2 bg-purple-50 rounded-lg font-mono border border-purple-200">
+                      {showSuperAdminPassword ? festival.super_admin_password : '•'.repeat(festival.super_admin_password?.length || 0)}
+                    </div>
+                    <button
+                      onClick={() => setShowSuperAdminPassword(!showSuperAdminPassword)}
+                      className="p-2 border border-purple-300 rounded-lg hover:bg-purple-50 transition-colors"
+                    >
+                      {showSuperAdminPassword ? <EyeOff className="w-5 h-5 text-purple-600" /> : <Eye className="w-5 h-5 text-purple-600" />}
+                    </button>
+                    <button
+                      onClick={() => setEditingSuperAdminPassword(true)}
+                      className="p-2 border border-purple-300 rounded-lg hover:bg-purple-50 transition-colors"
+                    >
+                      <Edit className="w-5 h-5 text-purple-600" />
+                    </button>
+                  </div>
+                )}
+                {festival.super_admin_password_updated_at && (
+                  <p className="text-xs text-purple-600 mt-2">
+                    Last updated: {new Date(festival.super_admin_password_updated_at).toLocaleString()}
+                  </p>
                 )}
               </div>
 

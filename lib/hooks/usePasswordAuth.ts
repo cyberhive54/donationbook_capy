@@ -7,10 +7,20 @@ function todayStr() {
   return new Date().toISOString().split('T')[0];
 }
 
+function generateSessionId() {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+function formatName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, '-');
+}
+
 export function usePasswordAuth(code: string) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [requiresPassword, setRequiresPassword] = useState(true);
+  const [festivalId, setFestivalId] = useState<string | null>(null);
+  const [storedName, setStoredName] = useState<string>('');
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -18,11 +28,12 @@ export function usePasswordAuth(code: string) {
         setIsLoading(true);
         const { data: festival, error } = await supabase
           .from('festivals')
-          .select('requires_user_password, user_password_updated_at, updated_at')
+          .select('id, requires_user_password, user_password_updated_at, updated_at')
           .eq('code', code)
           .single();
         if (error) throw error;
 
+        setFestivalId(festival?.id || null);
         const needPass = !!festival?.requires_user_password;
         setRequiresPassword(needPass);
 
@@ -37,8 +48,14 @@ export function usePasswordAuth(code: string) {
           try {
             const parsed = JSON.parse(auth);
             const validToday = parsed.date === todayStr();
-            const token = parsed.token; // stored timestamp
+            const token = parsed.token;
             const currentToken = festival.user_password_updated_at || festival.updated_at;
+            
+            // Store the name for pre-filling
+            if (parsed.visitorName) {
+              setStoredName(parsed.visitorName);
+            }
+            
             if (validToday && token === currentToken) {
               setIsAuthenticated(true);
               return;
@@ -57,11 +74,11 @@ export function usePasswordAuth(code: string) {
     if (code) checkAuth();
   }, [code]);
 
-  const verifyPassword = async (password: string): Promise<boolean> => {
+  const verifyPassword = async (password: string, name: string): Promise<boolean> => {
     try {
       const { data: festival, error } = await supabase
         .from('festivals')
-        .select('user_password, user_password_updated_at, updated_at, requires_user_password')
+        .select('id, user_password, user_password_updated_at, updated_at, requires_user_password')
         .eq('code', code)
         .single();
       if (error) throw error;
@@ -72,11 +89,39 @@ export function usePasswordAuth(code: string) {
       }
 
       if (festival && festival.user_password === password) {
-        localStorage.setItem(
-          `userPasswordAuth:${code}`,
-          JSON.stringify({ authenticated: true, date: todayStr(), token: festival.user_password_updated_at || festival.updated_at })
-        );
+        const formattedName = formatName(name);
+        const sessionId = generateSessionId();
+        const loggedAt = new Date().toISOString();
+
+        // Log access to database
+        try {
+          await supabase.rpc('log_festival_access', {
+            p_festival_id: festival.id,
+            p_visitor_name: formattedName,
+            p_access_method: 'password_modal',
+            p_password_used: password,
+            p_session_id: sessionId,
+          });
+        } catch (logError) {
+          console.error('Error logging access:', logError);
+          // Continue even if logging fails
+        }
+
+        // Store session in localStorage
+        const session = {
+          authenticated: true,
+          date: todayStr(),
+          token: festival.user_password_updated_at || festival.updated_at,
+          visitorName: formattedName,
+          sessionId,
+          accessMethod: 'password_modal',
+          passwordUsed: password,
+          loggedAt,
+        };
+
+        localStorage.setItem(`userPasswordAuth:${code}`, JSON.stringify(session));
         setIsAuthenticated(true);
+        setStoredName(formattedName);
         return true;
       }
       return false;
@@ -86,5 +131,12 @@ export function usePasswordAuth(code: string) {
     }
   };
 
-  return { isAuthenticated, isLoading, requiresPassword, verifyPassword };
+  return { 
+    isAuthenticated, 
+    isLoading, 
+    requiresPassword, 
+    verifyPassword,
+    storedName,
+    festivalId,
+  };
 }

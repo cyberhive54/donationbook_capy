@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X, Plus, Trash2, AlertCircle, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
-import { Collection } from '@/types';
+import { Collection, Festival } from '@/types';
 
 interface CollectionForm {
   name: string;
@@ -59,6 +59,37 @@ export default function AddCollectionModal({
 
   const [forms, setForms] = useState<CollectionForm[]>([emptyForm]);
   const [isLoading, setIsLoading] = useState(false);
+  const [festival, setFestival] = useState<{ ce_start_date?: string; ce_end_date?: string; event_name?: string } | null>(null);
+  const [loadingFestival, setLoadingFestival] = useState(true);
+  const [dateErrors, setDateErrors] = useState<Record<number, string>>({});
+
+  // Fetch festival CE dates
+  useEffect(() => {
+    const fetchFestival = async () => {
+      if (!festivalId) return;
+      
+      setLoadingFestival(true);
+      try {
+        const { data, error } = await supabase
+          .from('festivals')
+          .select('ce_start_date, ce_end_date, event_name')
+          .eq('id', festivalId)
+          .single();
+
+        if (error) throw error;
+        setFestival(data as { ce_start_date?: string; ce_end_date?: string; event_name?: string });
+      } catch (error) {
+        console.error('Error fetching festival:', error);
+        toast.error('Failed to load festival information');
+      } finally {
+        setLoadingFestival(false);
+      }
+    };
+
+    if (isOpen) {
+      fetchFestival();
+    }
+  }, [festivalId, isOpen]);
 
   // Reset forms when modal opens or editData changes
   useEffect(() => {
@@ -77,9 +108,40 @@ export default function AddCollectionModal({
       } else {
         setForms([emptyForm]);
       }
+      setDateErrors({});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, editData]);
+
+  // Validate date against CE range
+  const validateDate = (index: number, date: string): boolean => {
+    if (!festival?.ce_start_date || !festival?.ce_end_date) {
+      setDateErrors(prev => ({
+        ...prev,
+        [index]: 'Collection/Expense date range not set for this festival'
+      }));
+      return false;
+    }
+
+    const selectedDate = new Date(date);
+    const ceStart = new Date(festival.ce_start_date);
+    const ceEnd = new Date(festival.ce_end_date);
+
+    if (selectedDate < ceStart || selectedDate > ceEnd) {
+      setDateErrors(prev => ({
+        ...prev,
+        [index]: `Date must be between ${festival.ce_start_date} and ${festival.ce_end_date}`
+      }));
+      return false;
+    }
+
+    setDateErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[index];
+      return newErrors;
+    });
+    return true;
+  };
 
   const addForm = () => {
     if (forms.length < 5) {
@@ -90,6 +152,11 @@ export default function AddCollectionModal({
   const removeForm = (index: number) => {
     if (forms.length > 1) {
       setForms(forms.filter((_, i) => i !== index));
+      setDateErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[index];
+        return newErrors;
+      });
     }
   };
 
@@ -97,11 +164,23 @@ export default function AddCollectionModal({
     const newForms = [...forms];
     newForms[index] = { ...newForms[index], [field]: value };
     setForms(newForms);
+
+    // Validate date when it changes
+    if (field === 'date') {
+      validateDate(index, value);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Check if CE dates are set
+    if (!festival?.ce_start_date || !festival?.ce_end_date) {
+      toast.error('Collection/Expense date range not set. Please contact admin.');
+      return;
+    }
+
+    // Validate all forms
     for (let i = 0; i < forms.length; i++) {
       const form = forms[i];
       if (!form.name.trim() || !form.amount || !form.group_name || !form.mode || !form.date) {
@@ -113,14 +192,9 @@ export default function AddCollectionModal({
         return;
       }
 
-      // Validate date is within festival range
-      const formDate = new Date(form.date);
-      if (festivalStartDate && formDate < new Date(festivalStartDate)) {
-        toast.error(`Form ${i + 1}: Date cannot be before festival start date`);
-        return;
-      }
-      if (festivalEndDate && formDate > new Date(festivalEndDate)) {
-        toast.error(`Form ${i + 1}: Date cannot be after festival end date`);
+      // Validate date is within CE range
+      if (!validateDate(i, form.date)) {
+        toast.error(`Form ${i + 1}: Date is outside the valid range`);
         return;
       }
     }
@@ -138,8 +212,8 @@ export default function AddCollectionModal({
             mode: forms[0].mode,
             note: forms[0].note.trim() || null,
             date: forms[0].date,
-          time_hour: parseInt(forms[0].time_hour) || 0,
-          time_minute: parseInt(forms[0].time_minute) || 0,
+            time_hour: parseInt(forms[0].time_hour) || 0,
+            time_minute: parseInt(forms[0].time_minute) || 0,
           })
           .eq('id', editData.id);
 
@@ -154,6 +228,8 @@ export default function AddCollectionModal({
           mode: form.mode,
           note: form.note.trim() || null,
           date: form.date,
+          time_hour: parseInt(form.time_hour) || 0,
+          time_minute: parseInt(form.time_minute) || 0,
         }));
 
         const { error } = await supabase.from('collections').insert(insertData);
@@ -165,6 +241,7 @@ export default function AddCollectionModal({
       onSuccess();
       onClose();
       setForms([emptyForm]);
+      setDateErrors({});
     } catch (error) {
       console.error('Error saving collection:', error);
       toast.error('Failed to save collection(s)');
@@ -202,6 +279,29 @@ export default function AddCollectionModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 max-h-[70vh] overflow-y-auto">
+          {/* CE Date Range Info/Warning */}
+          {loadingFestival ? (
+            <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <p className="text-sm text-gray-600">Loading festival information...</p>
+            </div>
+          ) : !festival?.ce_start_date || !festival?.ce_end_date ? (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-yellow-800">
+                <p className="font-semibold mb-1">Collection/Expense date range not set</p>
+                <p>Please contact the admin to set the valid date range before adding collections.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
+              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <p className="font-semibold mb-1">Valid Date Range</p>
+                <p>Collections must be dated between <strong>{festival.ce_start_date}</strong> and <strong>{festival.ce_end_date}</strong></p>
+              </div>
+            </div>
+          )}
+
           {forms.map((form, index) => (
             <div
               key={index}
@@ -294,41 +394,49 @@ export default function AddCollectionModal({
                     type="date"
                     value={form.date}
                     onChange={(e) => updateForm(index, 'date', e.target.value)}
-                    min={festivalStartDate || ''}
-                    max={festivalEndDate || ''}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min={festival?.ce_start_date || ''}
+                    max={festival?.ce_end_date || ''}
+                    disabled={!festival?.ce_start_date || !festival?.ce_end_date}
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      dateErrors[index] ? 'border-red-500' : 'border-gray-300'
+                    } ${!festival?.ce_start_date || !festival?.ce_end_date ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                     required
                   />
+                  {dateErrors[index] && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {dateErrors[index]}
+                    </p>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Hour <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={form.time_hour}
-                    onChange={(e) => updateForm(index, 'time_hour', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Minute <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={form.time_minute}
-                    onChange={(e) => updateForm(index, 'time_minute', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Hour
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={form.time_hour}
+                      onChange={(e) => updateForm(index, 'time_hour', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Minute
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={form.time_minute}
+                      onChange={(e) => updateForm(index, 'time_minute', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="md:col-span-2">
@@ -357,8 +465,8 @@ export default function AddCollectionModal({
             </button>
             <button
               type="submit"
-              disabled={isLoading}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
+              disabled={isLoading || !festival?.ce_start_date || !festival?.ce_end_date || Object.keys(dateErrors).length > 0}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Saving...' : 'Save'}
             </button>
