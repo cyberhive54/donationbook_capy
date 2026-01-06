@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Transaction } from '@/types';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import { Search } from 'lucide-react';
 
 interface TransactionTableProps {

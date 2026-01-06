@@ -1,5 +1,5 @@
 import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
-import { Collection, Expense, Stats, Transaction } from '@/types';
+import { Collection, Expense, Stats, Transaction, MediaItem } from '@/types';
 
 export const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('en-IN', {
@@ -16,6 +16,62 @@ export const formatDate = (date: string): string => {
   } catch (error) {
     return date;
   }
+};
+
+
+export const formatDateTime = (date: string, hour?: number, minute?: number): string => {
+  try {
+    const dateStr = format(new Date(date), 'dd MMM yyyy');
+    if (hour !== undefined && minute !== undefined) {
+      const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+      return `${dateStr} ${timeStr}`;
+    }
+    return dateStr;
+  } catch (error) {
+    return date;
+  }
+};
+
+export const formatTimeOnly = (hour?: number, minute?: number): string => {
+  if (hour === undefined || minute === undefined) return '';
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+};
+
+export const formatFileSize = (bytes: number | null | undefined): string => {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+};
+
+export const getFileSizeLimit = (type: string): { bytes: number; label: string } => {
+  if (type.startsWith('video/')) return { bytes: 50 * 1024 * 1024, label: '50MB' };
+  return { bytes: 15 * 1024 * 1024, label: '15MB' };
+};
+
+export const calculateStorageStats = (items: MediaItem[]) => {
+  const totalBytes = items.reduce((sum, item) => sum + (item.size_bytes || 0), 0);
+  const maxBytes = 400 * 1024 * 1024;
+  const percentage = (totalBytes / maxBytes) * 100;
+  
+  const byType = items.reduce((acc, item) => {
+    const type = item.type;
+    if (!acc[type]) {
+      acc[type] = { count: 0, bytes: 0 };
+    }
+    acc[type].count++;
+    acc[type].bytes += item.size_bytes || 0;
+    return acc;
+  }, {} as Record<string, { count: number; bytes: number }>);
+  
+  return {
+    totalBytes,
+    maxBytes,
+    percentage: Math.min(percentage, 100),
+    availableBytes: Math.max(maxBytes - totalBytes, 0),
+    byType
+  };
 };
 
 export const calculateStats = (
@@ -43,6 +99,8 @@ export const combineTransactions = (
     mode: c.mode,
     note: c.note,
     date: c.date,
+    time_hour: c.time_hour,
+    time_minute: c.time_minute,
     created_at: c.created_at,
   }));
   
@@ -55,12 +113,23 @@ export const combineTransactions = (
     mode: e.mode,
     note: e.note,
     date: e.date,
+    time_hour: e.time_hour,
+    time_minute: e.time_minute,
     created_at: e.created_at,
   }));
   
-  return [...collectionTxns, ...expenseTxns].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
+  return [...collectionTxns, ...expenseTxns].sort((a, b) => {
+    const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
+    if (dateCompare !== 0) return dateCompare;
+    
+    const aHour = a.time_hour || 0;
+    const bHour = b.time_hour || 0;
+    if (bHour !== aHour) return bHour - aHour;
+    
+    const aMinute = a.time_minute || 0;
+    const bMinute = b.time_minute || 0;
+    return bMinute - aMinute;
+  });
 };
 
 export const filterByTimeRange = <T extends { date: string }>(
@@ -148,4 +217,49 @@ export const groupBy = <T extends Record<string, any>>(
     acc[group].push(item);
     return acc;
   }, {} as { [key: string]: T[] });
+};
+
+export const generateThumbnailFromVideo = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    
+    video.onloadeddata = () => {
+      video.currentTime = 1;
+    };
+    
+    video.onseeked = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(URL.createObjectURL(blob));
+          } else {
+            reject(new Error('Failed to create thumbnail'));
+          }
+        }, 'image/jpeg', 0.7);
+      } else {
+        reject(new Error('Failed to get canvas context'));
+      }
+      URL.revokeObjectURL(video.src);
+    };
+    
+    video.onerror = () => {
+      reject(new Error('Failed to load video'));
+    };
+    
+    video.src = URL.createObjectURL(file);
+  });
+};
+
+export const generatePDFThumbnail = async (file: File): Promise<string> => {
+  return new Promise((resolve) => {
+    resolve('');
+  });
 };

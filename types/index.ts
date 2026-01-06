@@ -51,6 +51,8 @@ export interface Collection {
   mode: string;
   note?: string;
   date: string;
+  time_hour?: number;
+  time_minute?: number;
   image_url?: string;
   created_at: string;
 }
@@ -66,6 +68,8 @@ export interface Expense {
   mode: string;
   note?: string;
   date: string;
+  time_hour?: number;
+  time_minute?: number;
   image_url?: string;
   created_at: string;
 }
@@ -79,6 +83,8 @@ export interface Transaction {
   mode: string;
   note?: string;
   date: string;
+  time_hour?: number;
+  time_minute?: number;
   created_at: string;
 }
 

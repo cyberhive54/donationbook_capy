@@ -15,6 +15,8 @@ interface ExpenseForm {
   mode: string;
   note: string;
   date: string;
+  time_hour: string;
+  time_minute: string;
   manualTotal: boolean;
 }
 
@@ -43,6 +45,10 @@ export default function AddExpenseModal({
 }: AddExpenseModalProps) {
   const today = new Date().toISOString().split('T')[0];
   
+  const now = new Date();
+  const currentHour = now.getHours().toString();
+  const currentMinute = now.getMinutes().toString();
+  
   const emptyForm: ExpenseForm = {
     item: '',
     pieces: '1',
@@ -52,6 +58,8 @@ export default function AddExpenseModal({
     mode: modes[0] || '',
     note: '',
     date: today,
+    time_hour: currentHour,
+    time_minute: currentMinute,
     manualTotal: false,
   };
 
@@ -71,6 +79,8 @@ export default function AddExpenseModal({
           mode: editData.mode,
           note: editData.note || '',
           date: editData.date,
+          time_hour: editData.time_hour?.toString() || '0',
+          time_minute: editData.time_minute?.toString() || '0',
           manualTotal: false,
         }]);
       } else {
@@ -167,6 +177,8 @@ export default function AddExpenseModal({
             mode: forms[0].mode,
             note: forms[0].note.trim() || null,
             date: forms[0].date,
+          time_hour: parseInt(forms[0].time_hour) || 0,
+          time_minute: parseInt(forms[0].time_minute) || 0,
           })
           .eq('id', editData.id);
 
@@ -183,6 +195,8 @@ export default function AddExpenseModal({
           mode: form.mode,
           note: form.note.trim() || null,
           date: form.date,
+          time_hour: parseInt(form.time_hour) || 0,
+          time_minute: parseInt(form.time_minute) || 0,
         }));
 
         const { error } = await supabase.from('expenses').insert(insertData);
@@ -355,6 +369,36 @@ export default function AddExpenseModal({
                     onChange={(e) => updateForm(index, 'date', e.target.value)}
                     min={festivalStartDate || ''}
                     max={festivalEndDate || ''}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Hour <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={form.time_hour}
+                    onChange={(e) => updateForm(index, 'time_hour', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Minute <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={form.time_minute}
+                    onChange={(e) => updateForm(index, 'time_minute', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />

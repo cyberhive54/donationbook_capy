@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Upload, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { Album } from '@/types';
@@ -11,13 +11,16 @@ interface AddEditAlbumModalProps {
   onClose: () => void;
   onSuccess: () => void;
   festivalId: string;
+  festivalCode: string;
   initial?: Album | null;
 }
 
-export default function AddEditAlbumModal({ isOpen, onClose, onSuccess, festivalId, initial }: AddEditAlbumModalProps) {
+export default function AddEditAlbumModal({ isOpen, onClose, onSuccess, festivalId, festivalCode, initial }: AddEditAlbumModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [year, setYear] = useState<number | ''>('');
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -26,13 +29,33 @@ export default function AddEditAlbumModal({ isOpen, onClose, onSuccess, festival
         setTitle(initial.title || '');
         setDescription(initial.description || '');
         setYear(initial.year || '');
+        setCoverPreview(initial.cover_url || '');
+        setCoverFile(null);
       } else {
         setTitle('');
         setDescription('');
         setYear('');
+        setCoverPreview('');
+        setCoverFile(null);
       }
     }
   }, [isOpen, initial]);
+
+  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select an image file');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Cover photo must be under 5MB');
+        return;
+      }
+      setCoverFile(file);
+      setCoverPreview(URL.createObjectURL(file));
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,16 +65,24 @@ export default function AddEditAlbumModal({ isOpen, onClose, onSuccess, festival
     }
     setIsLoading(true);
     try {
+      let coverUrl = initial?.cover_url || '';
+      
+      if (coverFile) {
+        const path = `${festivalCode}/covers/${Date.now()}-${coverFile.name}`;
+        const { error: upErr } = await supabase.storage.from('showcase').upload(path, coverFile, { upsert: false });
+        if (upErr) throw new Error(`Cover upload failed: ${upErr.message}`);
+        const { data: pub } = supabase.storage.from('showcase').getPublicUrl(path);
+        coverUrl = pub?.publicUrl || '';
+      }
+
       if (initial?.id) {
         const { error } = await supabase.from('albums').update({
           title: title.trim(),
           description: description.trim() || null,
           year: year === '' ? null : Number(year),
+          cover_url: coverUrl || null,
         }).eq('id', initial.id);
-        if (error) {
-          console.error('Album update error:', error);
-          throw error;
-        }
+        if (error) throw error;
         toast.success('Album updated');
       } else {
         const { error } = await supabase.from('albums').insert({
@@ -59,11 +90,9 @@ export default function AddEditAlbumModal({ isOpen, onClose, onSuccess, festival
           title: title.trim(),
           description: description.trim() || null,
           year: year === '' ? null : Number(year),
+          cover_url: coverUrl || null,
         });
-        if (error) {
-          console.error('Album insert error:', error);
-          throw error;
-        }
+        if (error) throw error;
         toast.success('Album created');
       }
       onSuccess();
@@ -98,9 +127,34 @@ export default function AddEditAlbumModal({ isOpen, onClose, onSuccess, festival
             <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
             <input type="number" value={year} onChange={(e) => setYear(e.target.value ? Number(e.target.value) : '')} className="w-full px-3 py-2 border rounded-lg" />
           </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Cover Photo</label>
+            {coverPreview && (
+              <div className="mb-2 relative w-full h-40 rounded-lg overflow-hidden border">
+                <img src={coverPreview} alt="Cover preview" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => { setCoverPreview(''); setCoverFile(null); }}
+                  className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            <label className="flex items-center justify-center gap-2 w-full px-4 py-3 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
+              {coverPreview ? <Upload className="w-5 h-5" /> : <ImageIcon className="w-5 h-5" />}
+              <span className="text-sm">{coverPreview ? 'Change Cover Photo' : 'Upload Cover Photo'}</span>
+              <input type="file" accept="image/*" onChange={handleCoverChange} className="hidden" />
+            </label>
+            <div className="text-xs text-gray-500 mt-1">Max 5MB. JPG, PNG, WEBP</div>
+          </div>
+          
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg">Cancel</button>
-            <button type="submit" disabled={isLoading} className="px-4 py-2 bg-blue-600 text-white rounded-lg">{isLoading ? 'Saving…' : 'Save'}</button>
+            <button type="submit" disabled={isLoading} className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50">
+              {isLoading ? 'Saving…' : 'Save'}
+            </button>
           </div>
         </form>
       </div>
