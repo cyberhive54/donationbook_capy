@@ -13,7 +13,7 @@ import { InfoSkeleton, CardSkeleton, TableSkeleton } from '@/components/Loader';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getThemeStyles } from '@/lib/theme';
+import { getThemeStyles, getThemeClasses } from '@/lib/theme';
 
 export default function FestivalHomePage() {
   const params = useParams<{ code: string }>();
@@ -80,10 +80,11 @@ export default function FestivalHomePage() {
     : {};
 
   const themeStyles = getThemeStyles(festival);
+  const themeClasses = getThemeClasses(festival);
 
   return (
     <PasswordGate code={code}>
-      <div className="min-h-screen pb-24" style={{ ...bgStyle, ...themeStyles }}>
+      <div className={`min-h-screen pb-24 ${themeClasses}`} style={{ ...bgStyle, ...themeStyles }}>
         <div className="max-w-7xl mx-auto px-4 py-6">
           {loading ? (
             <>
@@ -92,7 +93,7 @@ export default function FestivalHomePage() {
               <TableSkeleton rows={7} />
             </>
           ) : !festival ? (
-            <div className="bg-white rounded-lg shadow-md p-8 text-center">
+            <div className="theme-card bg-white rounded-lg shadow-md p-8 text-center">
               <p className="text-gray-700">Festival not found. Please check the code.</p>
               <Link href="/view" className="mt-4 inline-block text-blue-600 hover:text-blue-700">Go back</Link>
             </div>
@@ -112,7 +113,7 @@ export default function FestivalHomePage() {
               <StatsCards stats={stats} />
 
               <div className="space-y-6">
-                <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="theme-card bg-white rounded-lg shadow-md p-6">
                   <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-gray-800">Recent Transactions</h2>
                     <Link
@@ -176,7 +177,7 @@ export default function FestivalHomePage() {
                   )}
                 </div>
 
-                <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="theme-card bg-white rounded-lg shadow-md p-6">
                   <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-gray-800">Recent Collections</h2>
                     <Link
@@ -226,7 +227,7 @@ export default function FestivalHomePage() {
                   )}
                 </div>
 
-                <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="theme-card bg-white rounded-lg shadow-md p-6">
                   <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-gray-800">Recent Expenses</h2>
                     <Link

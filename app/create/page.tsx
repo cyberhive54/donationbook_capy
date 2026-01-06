@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
@@ -30,6 +30,10 @@ export default function CreateFestival() {
   });
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  const [postCreate, setPostCreate] = useState<{ open: boolean; code: string; countdown: number; auto: boolean }>(
+    { open: false, code: '', countdown: 10, auto: true }
+  );
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +69,7 @@ export default function CreateFestival() {
       });
       if (error) throw error;
       toast.success('Festival created!');
-      router.push(`/f/${code}`);
+      setPostCreate({ open: true, code, countdown: 10, auto: true });
     } catch (e) {
       console.error(e);
       toast.error('Failed to create festival');
@@ -73,6 +77,24 @@ export default function CreateFestival() {
       setLoading(false);
     }
   };
+
+  // handle countdown auto-redirect
+  useEffect(() => {
+    if (!postCreate.open || !postCreate.auto) return;
+    if (postCreate.countdown <= 0) {
+      router.push(`/f/${postCreate.code}`);
+      return;
+    }
+    const t = setTimeout(() => setPostCreate((s) => ({ ...s, countdown: s.countdown - 1 })), 1000);
+    return () => clearTimeout(t);
+  }, [postCreate.open, postCreate.auto, postCreate.countdown, router]);
+
+  const copy = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); toast.success('Copied'); } catch { toast.error('Copy failed'); }
+  };
+
+  const publicUrl = typeof window !== 'undefined' ? `${window.location.origin}/f/${postCreate.code}` : '';
+  const adminUrl = typeof window !== 'undefined' ? `${window.location.origin}/f/${postCreate.code}/admin` : '';
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -150,6 +172,78 @@ export default function CreateFestival() {
           </div>
         </form>
       </div>
+
+      {postCreate.open && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Festival Created</h2>
+            <p className="text-sm text-red-600 font-semibold mb-3">Warning: Save these details now. If lost, they cannot be recovered.</p>
+
+            <div className="space-y-3">
+              <div className="bg-gray-50 p-3 rounded">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">Festival Code</p>
+                    <p className="font-mono text-lg">{postCreate.code}</p>
+                  </div>
+                  <button onClick={() => copy(postCreate.code)} className="px-3 py-1 border rounded">Copy</button>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded">
+                <div className="flex items-center justify-between">
+                  <div className="overflow-hidden">
+                    <p className="text-xs text-gray-500">Public URL</p>
+                    <p className="font-mono text-sm truncate max-w-[260px]">{publicUrl}</p>
+                  </div>
+                  <button onClick={() => copy(publicUrl)} className="px-3 py-1 border rounded">Copy</button>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded">
+                <div className="flex items-center justify-between">
+                  <div className="overflow-hidden">
+                    <p className="text-xs text-gray-500">Admin URL</p>
+                    <p className="font-mono text-sm truncate max-w-[260px]">{adminUrl}</p>
+                  </div>
+                  <button onClick={() => copy(adminUrl)} className="px-3 py-1 border rounded">Copy</button>
+                </div>
+                <p className="text-xs text-gray-600 mt-1">Remember the admin password you set and use this URL to manage the festival.</p>
+              </div>
+
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Auto redirect</label>
+                  <button
+                    onClick={() => setPostCreate((s) => ({ ...s, auto: !s.auto }))}
+                    className={`px-3 py-1 rounded ${postCreate.auto ? 'bg-green-600 text-white' : 'bg-gray-200'}`}
+                  >
+                    {postCreate.auto ? 'On' : 'Off'}
+                  </button>
+                </div>
+                <div className="text-sm text-gray-700">
+                  Redirecting in <span className="font-semibold">{postCreate.countdown}s</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => router.push(`/f/${postCreate.code}`)}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Go to Festival Now
+                </button>
+                <button
+                  onClick={() => setPostCreate({ open: false, code: '', countdown: 10, auto: true })}
+                  className="px-4 py-2 border rounded"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

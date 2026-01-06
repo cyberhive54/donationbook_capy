@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Festival, Collection, Expense, Stats } from '@/types';
-import { calculateStats, groupBy, groupByDate } from '@/lib/utils';
+import { calculateStats, groupBy, groupByDateBetween } from '@/lib/utils';
 import PasswordGate from '@/components/PasswordGate';
 import BasicInfo from '@/components/BasicInfo';
 import StatsCards from '@/components/StatsCards';
@@ -16,7 +16,7 @@ import BarChart from '@/components/charts/BarChart';
 import TopDonatorsChart from '@/components/charts/TopDonatorsChart';
 import { InfoSkeleton, CardSkeleton, TableSkeleton, ChartSkeleton } from '@/components/Loader';
 import toast from 'react-hot-toast';
-import { getThemeStyles } from '@/lib/theme';
+import { getThemeStyles, getThemeClasses } from '@/lib/theme';
 
 export default function CollectionPage() {
   const params = useParams<{ code: string }>();
@@ -94,18 +94,19 @@ export default function CollectionPage() {
   }, [collections]);
 
   const dailyCollections = useMemo(() => {
-    return groupByDate(collections, 30);
-  }, [collections]);
+    return groupByDateBetween(collections, festival?.event_start_date || null, festival?.event_end_date || null);
+  }, [collections, festival]);
 
   const bgStyle: React.CSSProperties = festival?.theme_bg_image_url
     ? { backgroundImage: `url(${festival.theme_bg_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
     : { backgroundColor: festival?.theme_bg_color || '#f8fafc' };
 
   const themeStyles = getThemeStyles(festival);
+  const themeClasses = getThemeClasses(festival);
 
   return (
     <PasswordGate code={code}>
-      <div className="min-h-screen pb-24" style={{ ...bgStyle, ...themeStyles }}>
+      <div className={`min-h-screen pb-24 ${themeClasses}`} style={{ ...bgStyle, ...themeStyles }}>
         <div className="max-w-7xl mx-auto px-4 py-6">
           {loading ? (
             <>
@@ -118,7 +119,7 @@ export default function CollectionPage() {
               </div>
             </>
           ) : !festival ? (
-            <div className="bg-white rounded-lg shadow-md p-8 text-center">
+            <div className="theme-card bg-white rounded-lg shadow-md p-8 text-center">
               <p className="text-gray-700">Festival not found.</p>
             </div>
           ) : (
@@ -141,7 +142,7 @@ export default function CollectionPage() {
 
               <h2 className="text-2xl font-bold text-gray-800 mt-12 mb-6">Statistics</h2>
               <div className="space-y-6">
-                <CollectionVsExpenseChart collections={collections} expenses={expenses} />
+                <CollectionVsExpenseChart collections={collections} expenses={expenses} festivalStartDate={festival.event_start_date} festivalEndDate={festival.event_end_date} />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <PieChart data={collectionsByGroup} title="Collections by Group" />
@@ -150,7 +151,7 @@ export default function CollectionPage() {
 
                 <BarChart
                   data={dailyCollections}
-                  title="Daily Collection (Last Month)"
+                  title="Daily Collection (Festival Month Range)"
                   dataKey="amount"
                   xAxisKey="date"
                   color="#10b981"

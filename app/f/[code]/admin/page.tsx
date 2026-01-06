@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Festival, Collection, Expense, Stats } from '@/types';
+import { Festival, Collection, Expense, Stats, Album } from '@/types';
 import { calculateStats } from '@/lib/utils';
 import AdminPasswordGate from '@/components/AdminPasswordGate';
 import BasicInfo from '@/components/BasicInfo';
@@ -14,11 +14,13 @@ import ExpenseTable from '@/components/tables/ExpenseTable';
 import AddCollectionModal from '@/components/modals/AddCollectionModal';
 import AddExpenseModal from '@/components/modals/AddExpenseModal';
 import EditFestivalModal from '@/components/modals/EditFestivalModal';
+import AddEditAlbumModal from '@/components/modals/AddEditAlbumModal';
+import ManageAlbumMediaModal from '@/components/modals/ManageAlbumMediaModal';
 import DeleteConfirmModal from '@/components/modals/DeleteConfirmModal';
 import { InfoSkeleton, CardSkeleton, TableSkeleton } from '@/components/Loader';
 import toast from 'react-hot-toast';
 import { Plus, Edit, Trash2, Eye, EyeOff, Palette } from 'lucide-react';
-import { getThemeStyles } from '@/lib/theme';
+import { getThemeStyles, getThemeClasses } from '@/lib/theme';
 
 function AdminPageContent() {
   const params = useParams<{ code: string }>();
@@ -38,6 +40,17 @@ function AdminPageContent() {
   const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [albums, setAlbums] = useState<Album[]>([]);
+  const [isAlbumModalOpen, setIsAlbumModalOpen] = useState(false);
+  const [editingAlbum, setEditingAlbum] = useState<Album | null>(null);
+  const [isManageMediaOpen, setIsManageMediaOpen] = useState(false);
+  const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null);
+  const [isImportCollectionsOpen, setIsImportCollectionsOpen] = useState(false);
+  const [isImportExpensesOpen, setIsImportExpensesOpen] = useState(false);
+  const [isDeleteFestivalOpen, setIsDeleteFestivalOpen] = useState(false);
+  const [deleteFestivalDownload, setDeleteFestivalDownload] = useState(true);
+  const [deleteFestivalAdminPass, setDeleteFestivalAdminPass] = useState('');
+  const [importText, setImportText] = useState('');
   const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'collection' | 'expense'; id: string } | null>(null);
@@ -84,7 +97,7 @@ function AdminPageContent() {
         .single();
       if (festErr) throw festErr;
 
-      const [collectionsRes, expensesRes, groupsRes, categoriesRes, collectionModesRes, expenseModesRes] =
+      const [collectionsRes, expensesRes, groupsRes, categoriesRes, collectionModesRes, expenseModesRes, albumsRes] =
         await Promise.all([
           supabase.from('collections').select('*').eq('festival_id', fest.id).order('date', { ascending: false }),
           supabase.from('expenses').select('*').eq('festival_id', fest.id).order('date', { ascending: false }),
@@ -92,6 +105,7 @@ function AdminPageContent() {
           supabase.from('categories').select('*').eq('festival_id', fest.id).order('name'),
           supabase.from('collection_modes').select('*').eq('festival_id', fest.id).order('name'),
           supabase.from('expense_modes').select('*').eq('festival_id', fest.id).order('name'),
+          supabase.from('albums').select('*').eq('festival_id', fest.id).order('year', { ascending: false }),
         ]);
 
       const fetchedCollections = collectionsRes.data || [];
@@ -108,6 +122,7 @@ function AdminPageContent() {
       setCategories(fetchedCategories);
       setCollectionModes(fetchedCollectionModes);
       setExpenseModes(fetchedExpenseModes);
+      setAlbums(albumsRes.data || []);
 
       setThemeForm({
         theme_primary_color: fest.theme_primary_color || '#2563eb',
@@ -346,9 +361,194 @@ function AdminPageContent() {
     : { backgroundColor: festival?.theme_bg_color || '#f8fafc' };
 
   const themeStyles = getThemeStyles(festival);
+  const themeClasses = getThemeClasses(festival);
+
+  const normalize = (s: string) => s?.trim().toLowerCase();
+
+  const downloadJSON = (data: any, filename: string) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportCollections = () => {
+    downloadJSON(collections, `${festival?.code || 'fest'}-collections.json`);
+  };
+  const handleExportCollectionsImportFmt = () => {
+    const data = collections.map(c => ({
+      name: c.name,
+      amount: Number(c.amount),
+      group_name: c.group_name,
+      mode: c.mode,
+      note: c.note || '',
+      date: c.date,
+    }));
+    downloadJSON(data, `${festival?.code || 'fest'}-collections-import.json`);
+  };
+  const handleExportExpenses = () => {
+    downloadJSON(expenses, `${festival?.code || 'fest'}-expenses.json`);
+  };
+  const handleExportExpensesImportFmt = () => {
+    const data = expenses.map(e => ({
+      item: e.item,
+      pieces: Number(e.pieces),
+      price_per_piece: Number(e.price_per_piece),
+      total_amount: Number(e.total_amount),
+      category: e.category,
+      mode: e.mode,
+      note: e.note || '',
+      date: e.date,
+    }));
+    downloadJSON(data, `${festival?.code || 'fest'}-expenses-import.json`);
+  };
+
+  const exampleCollections = [
+    { name: 'John Doe', amount: 500, group_name: 'Group A', mode: 'Cash', note: 'Blessings', date: '2025-10-21' },
+    { name: 'Jane', amount: 1000, group_name: 'Group B', mode: 'UPI', note: '', date: '2025-10-22' },
+  ];
+  const exampleExpenses = [
+    { item: 'Flowers', pieces: 5, price_per_piece: 50, total_amount: 250, category: 'Decoration', mode: 'Cash', note: '', date: '2025-10-21' },
+    { item: 'Lights', pieces: 2, price_per_piece: 300, total_amount: 600, category: 'Decoration', mode: 'UPI', note: 'extra cable', date: '2025-10-22' },
+  ];
+
+  const handleImportCollections = async () => {
+    if (!festival) return;
+    try {
+      const parsed = JSON.parse(importText);
+      if (!Array.isArray(parsed)) throw new Error('JSON should be an array');
+      const groupMap = new Map(groups.map(g => [normalize(g), g]));
+      const modeMap = new Map(collectionModes.map(m => [normalize(m), m]));
+
+      const rows = parsed.map((c: any, idx: number) => {
+        const name = String(c.name || '').trim();
+        const amount = Number(c.amount);
+        const groupKey = normalize(String(c.group_name || ''));
+        const modeKey = normalize(String(c.mode || ''));
+        const date = String(c.date || '').trim();
+        const note = c.note != null ? String(c.note).trim() : null;
+
+        if (!name || !amount || !groupKey || !modeKey || !date) {
+          throw new Error(`Row ${idx + 1}: Missing required fields (name, amount, group_name, mode, date)`);
+        }
+        const group_name = groupMap.get(groupKey);
+        if (!group_name) throw new Error(`Row ${idx + 1}: Unknown group '${c.group_name}'. Ensure group exists or check spelling.`);
+        const mode = modeMap.get(modeKey);
+        if (!mode) throw new Error(`Row ${idx + 1}: Unknown mode '${c.mode}'. Ensure mode exists or check spelling.`);
+        if (isNaN(Date.parse(date))) throw new Error(`Row ${idx + 1}: Invalid date '${date}'. Use YYYY-MM-DD.`);
+
+        return {
+          festival_id: festival.id,
+          name,
+          amount,
+          group_name,
+          mode,
+          note,
+          date,
+        };
+      });
+
+      const { error } = await supabase.from('collections').insert(rows);
+      if (error) throw error;
+      toast.success('Collections imported');
+      setIsImportCollectionsOpen(false);
+      setImportText('');
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to import');
+    }
+  };
+
+  const handleImportExpenses = async () => {
+    if (!festival) return;
+    try {
+      const parsed = JSON.parse(importText);
+      if (!Array.isArray(parsed)) throw new Error('JSON should be an array');
+      const categoryMap = new Map(categories.map(c => [normalize(c), c]));
+      const modeMap = new Map(expenseModes.map(m => [normalize(m), m]));
+
+      const rows = parsed.map((x: any, idx: number) => {
+        const item = String(x.item || '').trim();
+        const pieces = Number(x.pieces);
+        const price_per_piece = Number(x.price_per_piece);
+        const total_amount = Number(x.total_amount);
+        const categoryKey = normalize(String(x.category || ''));
+        const modeKey = normalize(String(x.mode || ''));
+        const date = String(x.date || '').trim();
+        const note = x.note != null ? String(x.note).trim() : null;
+
+        if (!item || !pieces || pieces <= 0 || total_amount <= 0 || !categoryKey || !modeKey || !date) {
+          throw new Error(`Row ${idx + 1}: Missing/invalid required fields (item, pieces, total_amount, category, mode, date)`);
+        }
+        const category = categoryMap.get(categoryKey);
+        if (!category) throw new Error(`Row ${idx + 1}: Unknown category '${x.category}'. Ensure category exists or check spelling.`);
+        const mode = modeMap.get(modeKey);
+        if (!mode) throw new Error(`Row ${idx + 1}: Unknown mode '${x.mode}'. Ensure mode exists or check spelling.`);
+        if (isNaN(Date.parse(date))) throw new Error(`Row ${idx + 1}: Invalid date '${date}'. Use YYYY-MM-DD.`);
+
+        return {
+          festival_id: festival.id,
+          item,
+          pieces,
+          price_per_piece,
+          total_amount,
+          category,
+          mode,
+          note,
+          date,
+        };
+      });
+
+      const { error } = await supabase.from('expenses').insert(rows);
+      if (error) throw error;
+      toast.success('Expenses imported');
+      setIsImportExpensesOpen(false);
+      setImportText('');
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to import');
+    }
+  };
+
+  const handleDeleteFestival = async () => {
+    if (!festival) return;
+    try {
+      // verify admin password client-side minimal (optional if hook already protects)
+      if (!deleteFestivalAdminPass.trim()) {
+        toast.error('Enter admin password');
+        return;
+      }
+      // export first if chosen
+      if (deleteFestivalDownload) {
+        downloadJSON(collections, `${festival.code}-collections.json`);
+        downloadJSON(expenses, `${festival.code}-expenses.json`);
+        // also download import-format
+        const collImp = collections.map(c => ({ name: c.name, amount: Number(c.amount), group_name: c.group_name, mode: c.mode, note: c.note || '', date: c.date }));
+        const expImp = expenses.map(e => ({ item: e.item, pieces: Number(e.pieces), price_per_piece: Number(e.price_per_piece), total_amount: Number(e.total_amount), category: e.category, mode: e.mode, note: e.note || '', date: e.date }));
+        downloadJSON(collImp, `${festival.code}-collections-import.json`);
+        downloadJSON(expImp, `${festival.code}-expenses-import.json`);
+      }
+      // delete child tables then festival
+      await supabase.from('collections').delete().eq('festival_id', festival.id);
+      await supabase.from('expenses').delete().eq('festival_id', festival.id);
+      await supabase.from('groups').delete().eq('festival_id', festival.id);
+      await supabase.from('categories').delete().eq('festival_id', festival.id);
+      await supabase.from('collection_modes').delete().eq('festival_id', festival.id);
+      await supabase.from('expense_modes').delete().eq('festival_id', festival.id);
+      const { error } = await supabase.from('festivals').delete().eq('id', festival.id);
+      if (error) throw error;
+      toast.success('Festival permanently deleted');
+      window.location.href = '/';
+    } catch (e) {
+      toast.error('Failed to delete festival');
+    }
+  };
 
   return (
-    <div className="min-h-screen pb-24" style={{ ...bgStyle, ...themeStyles }}>
+    <div className={`min-h-screen pb-24 ${themeClasses}`} style={{ ...bgStyle, ...themeStyles }}>
       <div className="max-w-7xl mx-auto px-4 py-6">
         {loading ? (
           <>
@@ -357,12 +557,12 @@ function AdminPageContent() {
             <TableSkeleton rows={5} />
           </>
         ) : !festival ? (
-          <div className="bg-white rounded-lg shadow-md p-8 text-center">
+          <div className="theme-card bg-white rounded-lg shadow-md p-8 text-center">
             <p className="text-gray-700">Festival not found.</p>
           </div>
         ) : (
           <>
-            <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+            <div className="theme-card bg-white rounded-lg shadow-md p-4 mb-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Festival Code</p>
@@ -401,16 +601,36 @@ function AdminPageContent() {
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-2xl font-bold text-gray-800">Collections</h2>
-                  <button
-                    onClick={() => {
-                      setEditingCollection(null);
-                      setIsCollectionModalOpen(true);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingCollection(null);
+                        setIsCollectionModalOpen(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
                     <Plus className="w-5 h-5" />
-                    Add Collection
-                  </button>
+                      Add Collection
+                    </button>
+                    <button
+                      onClick={handleExportCollections}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Export JSON
+                    </button>
+                    <button
+                      onClick={handleExportCollectionsImportFmt}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Export (Import Format)
+                    </button>
+                    <button
+                      onClick={() => { setIsImportCollectionsOpen(true); setImportText(''); }}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Import JSON
+                    </button>
+                  </div>
                 </div>
                 <CollectionTable
                   collections={collections}
@@ -425,16 +645,36 @@ function AdminPageContent() {
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-2xl font-bold text-gray-800">Expenses</h2>
-                  <button
-                    onClick={() => {
-                      setEditingExpense(null);
-                      setIsExpenseModalOpen(true);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingExpense(null);
+                        setIsExpenseModalOpen(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
                     <Plus className="w-5 h-5" />
-                    Add Expense
-                  </button>
+                      Add Expense
+                    </button>
+                    <button
+                      onClick={handleExportExpenses}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Export JSON
+                    </button>
+                    <button
+                      onClick={handleExportExpensesImportFmt}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Export (Import Format)
+                    </button>
+                    <button
+                      onClick={() => { setIsImportExpensesOpen(true); setImportText(''); }}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      Import JSON
+                    </button>
+                  </div>
                 </div>
                 <ExpenseTable
                   expenses={expenses}
@@ -447,7 +687,7 @@ function AdminPageContent() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="theme-card bg-white rounded-lg shadow-md p-6">
                   <h3 className="text-lg font-bold text-gray-800 mb-4">Collection Settings</h3>
 
                   <div className="mb-6">
@@ -517,7 +757,7 @@ function AdminPageContent() {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="theme-card bg-white rounded-lg shadow-md p-6">
                   <h3 className="text-lg font-bold text-gray-800 mb-4">Expense Settings</h3>
 
                   <div className="mb-6">
@@ -588,7 +828,7 @@ function AdminPageContent() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="theme-card bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-bold text-gray-800 mb-4">User Password</h3>
                 {editingUserPassword ? (
                   <div className="flex gap-2">
@@ -636,7 +876,7 @@ function AdminPageContent() {
                 )}
               </div>
 
-              <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="theme-card bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-bold text-gray-800 mb-4">Admin Password</h3>
                 {editingAdminPassword ? (
                   <div className="flex gap-2">
@@ -684,7 +924,7 @@ function AdminPageContent() {
                 )}
               </div>
 
-              <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="theme-card bg-white rounded-lg shadow-md p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-bold text-gray-800">Theme & Appearance</h3>
                   <button
@@ -785,14 +1025,99 @@ function AdminPageContent() {
                       Enable dark theme
                     </label>
 
-                    <button
-                      onClick={handleUpdateTheme}
-                      className="w-full mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                    >
-                      Save Theme
-                    </button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                      <button
+                        onClick={handleUpdateTheme}
+                        className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                      >
+                        Save Theme
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!festival) return;
+                          const defaults = {
+                            theme_primary_color: '#2563eb',
+                            theme_secondary_color: '#1f2937',
+                            theme_bg_color: '#f8fafc',
+                            theme_bg_image_url: null as string | null,
+                            theme_text_color: '#111827',
+                            theme_border_color: '#d1d5db',
+                            theme_table_bg: '#ffffff',
+                            theme_card_bg: '#ffffff',
+                            theme_dark: false,
+                          };
+                          setThemeForm({
+                            theme_primary_color: defaults.theme_primary_color,
+                            theme_secondary_color: defaults.theme_secondary_color,
+                            theme_bg_color: defaults.theme_bg_color,
+                            theme_bg_image_url: '',
+                            theme_text_color: defaults.theme_text_color,
+                            theme_border_color: defaults.theme_border_color,
+                            theme_table_bg: defaults.theme_table_bg,
+                            theme_card_bg: defaults.theme_card_bg,
+                            theme_dark: defaults.theme_dark,
+                          });
+                          try {
+                            const { error } = await supabase
+                              .from('festivals')
+                              .update({
+                                ...defaults,
+                                updated_at: new Date().toISOString(),
+                              })
+                              .eq('id', festival.id);
+                            if (error) throw error;
+                            toast.success('Theme restored to defaults');
+                            fetchData();
+                          } catch (e) {
+                            toast.error('Failed to restore defaults');
+                          }
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                      >
+                        Restore Defaults
+                      </button>
+                    </div>
                   </div>
                 )}
+              </div>
+
+              <div className="theme-card bg-white rounded-lg shadow-md p-6 mt-8">
+                <h3 className="text-lg font-bold text-gray-800 mb-4">Showcase</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm text-gray-600">Create albums and upload photos, videos, audio, and PDFs. Users can view under Showcase.</p>
+                  <button
+                    onClick={() => { setEditingAlbum(null); setIsAlbumModalOpen(true); }}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                  >
+                    Add Album
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {albums.map(a => (
+                    <div key={a.id} className="border rounded-lg p-3 bg-white">
+                      <div className="font-semibold text-gray-800 truncate">{a.title}</div>
+                      <div className="text-xs text-gray-500">{a.year || 'Year N/A'}</div>
+                      <div className="text-sm text-gray-600 mt-1 line-clamp-2">{a.description}</div>
+                      <div className="flex gap-2 mt-3">
+                        <button onClick={() => { setEditingAlbum(a); setIsAlbumModalOpen(true); }} className="px-3 py-1 border rounded text-sm">Edit</button>
+                        <button onClick={async () => { await supabase.from('albums').delete().eq('id', a.id); toast.success('Album deleted'); fetchData(); }} className="px-3 py-1 border rounded text-sm">Delete</button>
+                        <button onClick={() => { setActiveAlbumId(a.id); setIsManageMediaOpen(true); }} className="px-3 py-1 border rounded text-sm">Manage Media</button>
+                      </div>
+                    </div>
+                  ))}
+                  {albums.length === 0 && (
+                    <div className="text-sm text-gray-600">No albums yet.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-10">
+                <button
+                  onClick={() => setIsDeleteFestivalOpen(true)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  Permanently Delete Festival
+                </button>
               </div>
             </div>
           </>
@@ -806,6 +1131,21 @@ function AdminPageContent() {
         onClose={() => setIsFestivalModalOpen(false)}
         onSuccess={fetchData}
         festival={festival}
+      />
+
+      <AddEditAlbumModal
+        isOpen={isAlbumModalOpen}
+        onClose={() => setIsAlbumModalOpen(false)}
+        onSuccess={fetchData}
+        festivalId={festival?.id || ''}
+        initial={editingAlbum}
+      />
+
+      <ManageAlbumMediaModal
+        isOpen={isManageMediaOpen}
+        onClose={() => setIsManageMediaOpen(false)}
+        albumId={activeAlbumId}
+        festivalCode={festival?.code || ''}
       />
 
       <AddCollectionModal
@@ -837,6 +1177,75 @@ function AdminPageContent() {
         festivalStartDate={festival?.event_start_date}
         festivalEndDate={festival?.event_end_date}
       />
+
+      {/* Import Collections Modal */}
+      {isImportCollectionsOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Import Collections (JSON)</h3>
+            <p className="text-sm text-gray-600 mb-2">Paste JSON array. Required: name, amount, group_name, mode, date. Note optional. Group & Mode will be matched case-insensitively and trimmed to existing values.</p>
+            <p className="text-xs text-gray-500 mb-2">If a group/mode does not exist, import will fail. Create them first in settings.</p>
+            <p className="text-xs text-gray-500 mb-2">Dates must be in YYYY-MM-DD.</p>
+            <p className="text-xs text-gray-500 mb-2">You can paste multiple rows.</p>
+            <div className="bg-gray-50 p-3 rounded border text-xs mb-3">
+{`[
+  { "name": "John Doe", "amount": 500, "group_name": "Group A", "mode": "Cash", "note": "Blessings", "date": "2025-10-21" },
+  { "name": "Jane", "amount": 1000, "group_name": "Group B", "mode": "UPI", "note": "", "date": "2025-10-22" }
+]`}
+            </div>
+            <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full border rounded p-2 h-40" />
+            <div className="flex justify-end gap-2 mt-3">
+              <button onClick={() => setImportText(JSON.stringify(exampleCollections, null, 2))} className="px-3 py-2 border rounded">Copy Example</button>
+              <button onClick={() => setIsImportCollectionsOpen(false)} className="px-3 py-2 border rounded">Cancel</button>
+              <button onClick={handleImportCollections} className="px-3 py-2 bg-blue-600 text-white rounded">Import</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Expenses Modal */}
+      {isImportExpensesOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Import Expenses (JSON)</h3>
+            <p className="text-sm text-gray-600 mb-2">Paste JSON array. Required: item, pieces, price_per_piece, total_amount, category, mode, date. Note optional. Category & Mode will be matched case-insensitively and trimmed to existing values.</p>
+            <p className="text-xs text-gray-500 mb-2">If a category/mode does not exist, import will fail. Create them first in settings.</p>
+            <p className="text-xs text-gray-500 mb-2">Dates must be in YYYY-MM-DD.</p>
+            <p className="text-xs text-gray-500 mb-2">You can paste multiple rows.</p>
+            <div className="bg-gray-50 p-3 rounded border text-xs mb-3">
+{`[
+  { "item": "Flowers", "pieces": 5, "price_per_piece": 50, "total_amount": 250, "category": "Decoration", "mode": "Cash", "note": "", "date": "2025-10-21" },
+  { "item": "Lights", "pieces": 2, "price_per_piece": 300, "total_amount": 600, "category": "Decoration", "mode": "UPI", "note": "extra cable", "date": "2025-10-22" }
+]`}
+            </div>
+            <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full border rounded p-2 h-40" />
+            <div className="flex justify-end gap-2 mt-3">
+              <button onClick={() => setImportText(JSON.stringify(exampleExpenses, null, 2))} className="px-3 py-2 border rounded">Copy Example</button>
+              <button onClick={() => setIsImportExpensesOpen(false)} className="px-3 py-2 border rounded">Cancel</button>
+              <button onClick={handleImportExpenses} className="px-3 py-2 bg-blue-600 text-white rounded">Import</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Festival Modal */}
+      {isDeleteFestivalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Permanently Delete Festival</h3>
+            <p className="text-sm text-red-600 mb-2">Warning: This cannot be undone. Download data before deleting.</p>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={deleteFestivalDownload} onChange={(e) => setDeleteFestivalDownload(e.target.checked)} /> Download data (JSON) before delete</label>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Admin Password</label>
+              <input type="password" value={deleteFestivalAdminPass} onChange={(e) => setDeleteFestivalAdminPass(e.target.value)} className="w-full border rounded px-3 py-2" />
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setIsDeleteFestivalOpen(false)} className="px-3 py-2 border rounded">Cancel</button>
+              <button onClick={handleDeleteFestival} className="px-3 py-2 bg-red-600 text-white rounded">Delete Permanently</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <DeleteConfirmModal
         isOpen={isDeleteModalOpen}

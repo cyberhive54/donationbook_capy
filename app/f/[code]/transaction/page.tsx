@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Festival, Collection, Expense, Stats, Transaction } from '@/types';
-import { calculateStats, combineTransactions, groupBy, groupByDate } from '@/lib/utils';
+import { calculateStats, combineTransactions, groupBy, groupByDateBetween } from '@/lib/utils';
 import PasswordGate from '@/components/PasswordGate';
 import BasicInfo from '@/components/BasicInfo';
 import StatsCards from '@/components/StatsCards';
@@ -15,7 +15,7 @@ import PieChart from '@/components/charts/PieChart';
 import { InfoSkeleton, CardSkeleton, TableSkeleton, ChartSkeleton } from '@/components/Loader';
 import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { getThemeStyles } from '@/lib/theme';
+import { getThemeStyles, getThemeClasses } from '@/lib/theme';
 import { format } from 'date-fns';
 
 export default function TransactionPage() {
@@ -114,8 +114,8 @@ export default function TransactionPage() {
   }, [expenses]);
 
   const dailyCollectionExpense = useMemo(() => {
-    const collectionsByDate = groupByDate(collections, 30);
-    const expensesByDate = groupByDate(expenses, 30);
+    const collectionsByDate = groupByDateBetween(collections, festival?.event_start_date || null, festival?.event_end_date || null);
+    const expensesByDate = groupByDateBetween(expenses, festival?.event_start_date || null, festival?.event_end_date || null);
 
     const dateMap = new Map<string, { collection: number; expense: number }>();
 
@@ -144,10 +144,11 @@ export default function TransactionPage() {
     : { backgroundColor: festival?.theme_bg_color || '#f8fafc' };
 
   const themeStyles = getThemeStyles(festival);
+  const themeClasses = getThemeClasses(festival);
 
   return (
     <PasswordGate code={code}>
-      <div className="min-h-screen pb-24" style={{ ...bgStyle, ...themeStyles }}>
+      <div className={`min-h-screen pb-24 ${themeClasses}`} style={{ ...bgStyle, ...themeStyles }}>
         <div className="max-w-7xl mx-auto px-4 py-6">
           {loading ? (
             <>
@@ -160,7 +161,7 @@ export default function TransactionPage() {
               </div>
             </>
           ) : !festival ? (
-            <div className="bg-white rounded-lg shadow-md p-8 text-center">
+            <div className="theme-card bg-white rounded-lg shadow-md p-8 text-center">
               <p className="text-gray-700">Festival not found.</p>
             </div>
           ) : (
@@ -183,7 +184,7 @@ export default function TransactionPage() {
 
               <h2 className="text-2xl font-bold text-gray-800 mt-12 mb-6">Statistics</h2>
               <div className="space-y-6">
-                <CollectionVsExpenseChart collections={collections} expenses={expenses} />
+                <CollectionVsExpenseChart collections={collections} expenses={expenses} festivalStartDate={festival.event_start_date} festivalEndDate={festival.event_end_date} />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <PieChart data={collectionsByGroup} title="Collections by Group" />
@@ -195,9 +196,9 @@ export default function TransactionPage() {
                   <PieChart data={expensesByMode} title="Expenses by Mode" />
                 </div>
 
-                <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="theme-card bg-white rounded-lg shadow-md p-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                    Daily Collection & Expense (Last Month)
+                    Daily Collection & Expense (Festival Month Range)
                   </h3>
                   {dailyCollectionExpense.length === 0 ? (
                     <div className="h-64 flex items-center justify-center text-gray-500">
